@@ -1,0 +1,14 @@
+{
+    "system": "BinaryQuasarSystem",
+    "standard_pinn": {
+        "final_loss": 0.0689663365483284,
+        "rel_l2_error": 0.8825465440750122,
+        "time_sec": 23.998103141784668
+    },
+    "as_pinn": {
+        "final_loss": 0.1958123743534088,
+        "rel_l2_error": 1.1023826599121094,
+        "discovered_N": 9,
+        "time_sec": 143.27774238586426
+    }
+}
