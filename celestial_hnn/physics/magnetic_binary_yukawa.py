@@ -42,9 +42,9 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
             self.T_max = 3.0
             self.x_init = (0.70, 0.40, 0.10, 0.40)
         else: # chaotic multi-loop close encounter
-            self.eps = 0.15
-            self.T_max = 6.0
-            self.x_init = (0.45, 0.30, 0.10, 0.35)
+            self.eps = 0.28
+            self.T_max = 4.5
+            self.x_init = (0.70, 0.40, 0.10, 0.40)
             
         self.eps_sq = self.eps ** 2
         

@@ -92,10 +92,11 @@ class AdaptiveTimeMarchingHNNTrainer:
                 dz_b = dz_true[sample_indices]
                 H_b = H_exact[sample_indices]
                 
-                # Global phase space regularization
-                z_rand, dz_rand = self.system.sample_phase_space(128)
-                z_all = torch.cat([z_b, z_rand], dim=0)
-                dz_all = torch.cat([dz_b, dz_rand], dim=0)
+                # Trajectory-tube manifold regularization
+                z_tube = z_b + torch.randn_like(z_b) * 0.05
+                dz_tube = self.system.canonical_derivatives(z_tube)
+                z_all = torch.cat([z_b, z_tube], dim=0)
+                dz_all = torch.cat([dz_b, dz_tube], dim=0)
                 
                 dz_pred = self.hnn.time_derivative(z_all, create_graph=True)
                 loss_field = torch.mean((dz_pred - dz_all) ** 2)

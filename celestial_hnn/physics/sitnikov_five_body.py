@@ -30,7 +30,7 @@ class SitnikovFiveBodyHamiltonianSystem(BaseHamiltonianSystem):
             self.T_max = 6.283185
             self.z_init = (0.50, 0.0)
             
-        self.r0_sq = 0.5 * ((1.0 - self.e ** 2) ** 2)
+        self.r0_sq = ((1.0 - self.e ** 2) ** 2)
         z0, vz0 = self.z_init
         z0_t = torch.tensor([z0, vz0], dtype=torch.float32)
         
