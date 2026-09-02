@@ -22,25 +22,35 @@ from celestial_hnn.models.separable_generating_hnn import SeparableGeneratingMap
 from celestial_hnn.models.extended_generating_hnn import ExtendedGeneratingMapHNN
 from celestial_hnn.models.grand_unified_engine import GrandUnifiedSymplecticEngine
 
-def train_model_with_cpa_time_marching(model, system, n_windows: int = 4, epochs_per_window: int = 50, use_lbfgs: bool = True, lbfgs_max_iter: int = 25) -> Dict[str, Any]:
+def train_model_with_cpa_time_marching(
+    model, 
+    system, 
+    n_windows: int = 5, 
+    epochs_per_window: int = 80, 
+    use_lbfgs: bool = True, 
+    lbfgs_max_iter: int = 50,
+    verbose: bool = False
+) -> Dict[str, Any]:
     dev = system.device
     T_max = system.T_max
     window_boundaries = torch.linspace(0, T_max, n_windows + 1, device=dev)
     
     for w in range(n_windows):
         t_curr_end = window_boundaries[w + 1]
-        t_w = torch.linspace(0, t_curr_end, 500 * (w + 1), device=dev)
+        t_w = torch.linspace(0, t_curr_end, 1000 * (w + 1), device=dev)
         z_w = system.ground_truth_trajectory(t_w)
         dz_w = system.canonical_derivatives(z_w)
         H_w = system.exact_hamiltonian(z_w)
         
-        # AdamW Phase
-        opt_adam = torch.optim.AdamW(model.parameters(), lr=3e-3, weight_decay=1e-6)
-        for _ in range(epochs_per_window):
+        # 1. High-Precision AdamW Phase
+        opt_adam = torch.optim.AdamW(model.parameters(), lr=2.5e-3, weight_decay=1e-6)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt_adam, T_max=epochs_per_window, eta_min=1e-5)
+        
+        for ep in range(epochs_per_window):
             opt_adam.zero_grad()
-            idx = torch.randint(0, len(z_w), (min(512, len(z_w)),), device=dev)
+            idx = torch.randint(0, len(z_w), (min(1024, len(z_w)),), device=dev)
             zb = z_w[idx]
-            zt = zb + torch.randn_like(zb) * 0.02
+            zt = zb + torch.randn_like(zb) * 0.025  # Dense off-manifold collocation
             za = torch.cat([zb, zt], dim=0)
             dza = torch.cat([dz_w[idx], system.canonical_derivatives(zt)], dim=0)
             
@@ -55,10 +65,19 @@ def train_model_with_cpa_time_marching(model, system, n_windows: int = 4, epochs
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             opt_adam.step()
+            scheduler.step()
             
-        # L-BFGS Curvature Refinement Phase
+        # 2. Aggressive Second-Order L-BFGS Curvature Refinement
         if use_lbfgs:
-            opt_lbfgs = torch.optim.LBFGS(model.parameters(), lr=0.5, max_iter=lbfgs_max_iter, history_size=20, line_search_fn="strong_wolfe")
+            opt_lbfgs = torch.optim.LBFGS(
+                model.parameters(), 
+                lr=0.8, 
+                max_iter=lbfgs_max_iter, 
+                history_size=30, 
+                line_search_fn="strong_wolfe",
+                tolerance_grad=1e-7,
+                tolerance_change=1e-9
+            )
             zb_l = z_w
             dza_l = dz_w
             H_w_l = H_w
@@ -80,7 +99,7 @@ def train_model_with_cpa_time_marching(model, system, n_windows: int = 4, epochs
                 pass
                 
     err = system.compute_trajectory_error(model)
-    t_dense = torch.linspace(0, T_max, 2500, device=dev)
+    t_dense = torch.linspace(0, T_max, 3000, device=dev)
     z_pred = model.integrate_symplectic_rk4(system.z0, t_dense).squeeze(1)
     if hasattr(model, "hamiltonian"):
         H_pred = model.hamiltonian(z_pred).view(-1)
@@ -90,12 +109,18 @@ def train_model_with_cpa_time_marching(model, system, n_windows: int = 4, epochs
         drift = 100.0
     return {"rel_l2_error": err * 100, "energy_drift": drift, "z_pred": z_pred}
 
-def run_nine_way_single_system(system, epochs: int = 120, device: Optional[torch.device] = None) -> Dict[str, Any]:
+def run_nine_way_single_system(
+    system, 
+    epochs: int = 400, 
+    n_windows: int = 5,
+    lbfgs_max_iter: int = 50,
+    device: Optional[torch.device] = None
+) -> Dict[str, Any]:
     dev = device if device is not None else system.device
-    t_dense = torch.linspace(0, system.T_max, 2500, device=dev)
+    t_dense = torch.linspace(0, system.T_max, 3000, device=dev)
     z_orb = system.ground_truth_trajectory(t_dense)
     n_c = getattr(system, "n", 1.0) if system.spatial_dim == 2 else 0.0
-    ep_win = max(5, epochs // 4)
+    ep_win = max(10, epochs // n_windows)
     
     models = {
         "1_Standard_PINN_MLP": BaselineVectorFieldMLP(state_dim=2*system.spatial_dim, hidden_dim=256).to(dev),
@@ -110,14 +135,18 @@ def run_nine_way_single_system(system, epochs: int = 120, device: Optional[torch
     }
     
     results = {}
+    drifts = {}
     preds = {}
     
     for name, m in models.items():
-        res = train_model_with_cpa_time_marching(m, system, n_windows=4, epochs_per_window=ep_win, use_lbfgs=True, lbfgs_max_iter=20)
+        res = train_model_with_cpa_time_marching(
+            m, system, n_windows=n_windows, epochs_per_window=ep_win, use_lbfgs=True, lbfgs_max_iter=lbfgs_max_iter
+        )
         results[name] = res["rel_l2_error"]
+        drifts[name] = res["energy_drift"]
         preds[name] = res["z_pred"]
         
-    # Save High-Res 3-Panel Visual Comparison
+    # High-Res Publication Grade 3-Panel Figure (300 DPI)
     os.makedirs("results/plots", exist_ok=True)
     fig, axes = plt.subplots(1, 3, figsize=(18, 5.5), dpi=300)
     gt_np = z_orb.detach().cpu().numpy()
@@ -126,7 +155,7 @@ def run_nine_way_single_system(system, epochs: int = 120, device: Optional[torch
     axes[0].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
     axes[0].plot(preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 1], 'r--', lw=1.5, label=f'Standard MLP ({results["1_Standard_PINN_MLP"]:.1f}%)')
     axes[0].plot(preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 0], preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 1], 'g:', lw=1.5, label=f'Vanilla HNN ({results["2_Vanilla_HNN_2019"]:.1f}%)')
-    axes[0].set_title(f"A: Baselines vs Ground Truth\n{system.name}", fontsize=11, fontweight='bold')
+    axes[0].set_title(f"A: Baseline Baselines\n{system.name}", fontsize=11, fontweight='bold')
     axes[0].grid(True, linestyle=':', alpha=0.6)
     axes[0].legend(loc='best', fontsize=8)
     
@@ -153,19 +182,26 @@ def run_nine_way_single_system(system, epochs: int = 120, device: Optional[torch
     plt.savefig(plot_path)
     plt.close()
     
-    # Save JSON
+    # Save Full System JSON
     os.makedirs("results/data", exist_ok=True)
     json_path = f"results/data/nine_way_{getattr(system, 'regime', 'reg')}_{system.name}_results.json"
+    full_export = {"errors": results, "energy_drifts": drifts}
     with open(json_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+        json.dump(full_export, f, indent=2)
         
     return results
 
-def run_nine_way_master_suite(regime: str = "chaotic", epochs: int = 120, device: Optional[torch.device] = None) -> pd.DataFrame:
+def run_nine_way_master_suite(
+    regime: str = "chaotic", 
+    epochs: int = 400, 
+    n_windows: int = 5,
+    lbfgs_max_iter: int = 50,
+    device: Optional[torch.device] = None
+) -> pd.DataFrame:
     dev = device if device is not None else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     print("=" * 105)
-    print(f"  NINE-WAY UNIFIED TIME-MARCHING CELESTIAL BENCHMARK SUITE")
-    print(f"  Regime: {regime.upper()} | Epochs: {epochs} | Device: {dev}")
+    print(f"  NINE-WAY GRAND SCIENTIFIC BENCHMARK MASTER SUITE (KAGGLE GPU ENGINE)")
+    print(f"  Regime: {regime.upper()} | Total Epochs: {epochs} | Windows: {n_windows} | L-BFGS Max Iter: {lbfgs_max_iter} | Device: {dev}")
     print("=" * 105)
     
     systems = [
@@ -177,9 +213,9 @@ def run_nine_way_master_suite(regime: str = "chaotic", epochs: int = 120, device
     
     records = []
     for s in systems:
-        print(f"\n--- 9-Way Benchmark for System: {s.name} ({regime}) ---")
+        print(f"\n>>> Benchmarking 9 Paradigms on System: {s.name} ({regime.upper()}) <<<")
         t0 = time.time()
-        res = run_nine_way_single_system(s, epochs=epochs, device=dev)
+        res = run_nine_way_single_system(s, epochs=epochs, n_windows=n_windows, lbfgs_max_iter=lbfgs_max_iter, device=dev)
         el = time.time() - t0
         res["System"] = s.name
         res["Regime"] = regime
@@ -195,7 +231,7 @@ def run_nine_way_master_suite(regime: str = "chaotic", epochs: int = 120, device
     df.to_csv(out_csv, index=False)
     print(f"\n[+] Saved 9-Way Master CSV: {out_csv}")
     
-    # Master Bar Chart
+    # Master Summary Bar Chart
     plt.figure(figsize=(15, 6), dpi=300)
     models_keys = ["1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "7_Combo_1_plus_3", "9_Combo_1_2_3_Unified"]
     labels = ["Standard PINN", "Vanilla HNN", "CPA-SHNN Core", "Thm 1 (Separable)", "Combo 1+3 (Sep-Gen)", "Grand Unified Engine"]
@@ -208,7 +244,7 @@ def run_nine_way_master_suite(regime: str = "chaotic", epochs: int = 120, device
         
     plt.xticks(x + width*2.5, [s.name for s in systems], fontsize=9)
     plt.ylabel("Trajectory Relative L2 Error (%)", fontsize=11, fontweight='bold')
-    plt.title(f"9-Way Architectural Paradigm Benchmark with Causal Time-Marching ({regime.upper()})", fontsize=13, fontweight='bold')
+    plt.title(f"9-Way Architectural Paradigm Master Benchmark ({regime.upper()})", fontsize=13, fontweight='bold')
     plt.yscale("log")
     plt.grid(True, linestyle=':', alpha=0.6, which="both")
     plt.legend(loc='upper right', fontsize=9)
@@ -223,3 +259,6 @@ def run_nine_way_master_suite(regime: str = "chaotic", epochs: int = 120, device
     print("=" * 125)
     
     return df
+
+if __name__ == "__main__":
+    run_nine_way_master_suite(regime="regular", epochs=10)
