@@ -7,17 +7,17 @@ from celestial_hnn.benchmarks.run_system2_sixbody import run_system2_benchmark
 from celestial_hnn.benchmarks.run_system3_sitnikov import run_system3_benchmark
 from celestial_hnn.benchmarks.run_system4_yukawa import run_system4_benchmark
 
-def run_master_celestial_hnn_suite():
+def run_master_celestial_hnn_suite(regime="regular"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("\n" + "="*80)
-    print("  SYMPLECTIC HAMILTONIAN NEURAL NETWORK (HNN) CELESTIAL MASTER BENCHMARK")
+    print(f"  SYMPLECTIC HNN CELESTIAL MASTER BENCHMARK (REGIME: {regime.upper()})")
     print(f"  Execution Device: {device} | Torch Version: {torch.__version__}")
     print("="*80)
     
-    r1 = run_system1_benchmark(device)
-    r2 = run_system2_benchmark(device)
-    r3 = run_system3_benchmark(device)
-    r4 = run_system4_benchmark(device)
+    r1 = run_system1_benchmark(device, regime=regime)
+    r2 = run_system2_benchmark(device, regime=regime)
+    r3 = run_system3_benchmark(device, regime=regime)
+    r4 = run_system4_benchmark(device, regime=regime)
     
     all_results = [r1, r2, r3, r4]
     
@@ -29,7 +29,6 @@ def run_master_celestial_hnn_suite():
         hnn_loss = r["hnn_symplectic"]["final_loss"]
         hnn_l2 = r["hnn_symplectic"]["rel_l2_error"]
         
-        improvement_loss = std_loss / max(hnn_loss, 1e-12)
         improvement_l2 = (std_l2 - hnn_l2) / max(std_l2, 1e-8) * 100.0
         
         summary_rows.append({
@@ -43,13 +42,14 @@ def run_master_celestial_hnn_suite():
         
     df = pd.DataFrame(summary_rows)
     os.makedirs("results/data", exist_ok=True)
-    df.to_csv("results/data/master_celestial_hnn_benchmarks.csv", index=False)
+    df.to_csv(f"results/data/master_celestial_hnn_benchmarks_{regime}.csv", index=False)
     
     print("\n" + "="*85)
-    print("             MASTER CELESTIAL HAMILTONIAN QUANTITATIVE MATRIX")
+    print(f"        MASTER CELESTIAL HAMILTONIAN MATRIX ({regime.upper()})")
     print("="*85)
     print(df.to_string(index=False))
     print("="*85 + "\n")
+    return df
 
 if __name__ == "__main__":
-    run_master_celestial_hnn_suite()
+    run_master_celestial_hnn_suite("regular")
