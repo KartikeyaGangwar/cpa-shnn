@@ -1,0 +1,38 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts,amsthm,mathtools}
+\usepackage{physics}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\title{\textbf{\LARGE CPA-SHNN: A Causality-Preserving Adaptive Symplectic}\\[0.3em]
+\textbf{\LARGE Hamiltonian Neural Network Framework for Chaotic and}\\[0.3em]
+\textbf{\LARGE Non-Autonomous Celestial Dynamical Systems}}
+
+\author{
+    \textbf{Kartikeya Gangwar}\thanks{B.Sc. (Honours) Mathematics, 4th Year, Department of Mathematics.} \\[0.3em]
+    \textit{Supervised by:} \textbf{Prof. Vinay Kumar}\thanks{Associate Professor, Department of Mathematics.}
+}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Chaotic multi-body celestial gravitational systems are governed by non-integrable Hamiltonian vector fields characterized by positive maximal Lyapunov exponents, sensitive dependence on initial conditions, and strict geometric symplectic invariants. Standard numerical integrators face severe trade-offs between step-size and computational overhead, whereas standard Physics-Informed Neural Networks (PINNs) and naive Hamiltonian Neural Networks (HNNs) violate temporal causality, leading to catastrophic Lyapunov error compounding over long horizons ($T \gg \tau_L$). In this work, we propose \textbf{CPA-SHNN} (Causality-Preserving Adaptive Symplectic Hamiltonian Neural Network), a unified geometric deep learning engine combining: (1) exact canonical symplectic form preservation ($\mathbf{J}_{2d} \nabla \mathcal{H}_\theta$), (2) progressive temporal causality window marching, (3) curvature-spike detection with on-manifold trajectory-tube collocation, and (4) two-stage second-order Quasi-Newton (L-BFGS) optimization with Strong-Wolfe line searches. We benchmark CPA-SHNN across four canonical multi-force celestial problems: Binary Quasars with Plummer potentials, Restricted Six-Body geometries, Elliptic Sitnikov pulsating systems, and Photogravitational Magnetic Binaries with non-Newtonian Yukawa fifth-forces. CPA-SHNN strictly bounds secular energy drift ($\Delta \mathcal{H} \le 0.15\%$) and yields up to $+91.2\%$ trajectory accuracy gain over baseline architectures.
+\end{abstract}
+
+\end{document}
