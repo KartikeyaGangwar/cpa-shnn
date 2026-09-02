@@ -12,9 +12,9 @@ class SitnikovFiveBodyHamiltonianSystem(BaseHamiltonianSystem):
     """
     def __init__(
         self,
-        eccentricity: float = 0.15,
+        eccentricity: float = 0.0,
         radiation_q: float = 0.85,
-        V_max: float = 6.283185,
+        V_max: float = 3.14159,
         z_init: Tuple[float, float] = (0.40, 0.0),
         device: Optional[torch.device] = None,
     ):

@@ -14,10 +14,10 @@ class BinaryQuasarHamiltonianSystem(BaseHamiltonianSystem):
         self,
         mu: float = 0.30,
         n: float = 1.0,
-        eps1: float = 0.10,
-        eps2: float = 0.10,
-        T_max: float = 6.0,
-        x_init: Tuple[float, float, float, float] = (0.50, 0.20, 0.0, 0.40),
+        eps1: float = 0.25,
+        eps2: float = 0.25,
+        T_max: float = 3.0,
+        x_init: Tuple[float, float, float, float] = (0.80, 0.30, 0.05, 0.45),
         device: Optional[torch.device] = None,
     ):
         self.mu = mu

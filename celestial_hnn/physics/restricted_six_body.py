@@ -15,8 +15,8 @@ class RestrictedSixBodyHamiltonianSystem(BaseHamiltonianSystem):
         m0: float = 0.20,
         a: float = 1.0,
         n: float = 1.0,
-        eps: float = 0.10,
-        T_max: float = 6.0,
+        eps: float = 0.25,
+        T_max: float = 3.0,
         x_init: Tuple[float, float, float, float] = (0.35, 0.35, 0.25, -0.25),
         device: Optional[torch.device] = None,
     ):
