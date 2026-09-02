@@ -1,6 +1,6 @@
 import time
 import copy
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 import numpy as np
 import torch
 import torch.nn as nn
@@ -40,7 +40,7 @@ class BaselineVectorFieldMLP(nn.Module):
 
 class CelestialHNNTrainer:
     """
-    Symplectic Hamiltonian Neural Network Benchmark Trainer with Orbit-Manifold Loss.
+    Symplectic Hamiltonian Neural Network Benchmark Trainer with Two-Stage (AdamW + L-BFGS) Optimizer.
     """
     def __init__(self, system: BaseHamiltonianSystem, device: Optional[torch.device] = None, seed: int = 42):
         self.system = system
@@ -49,29 +49,31 @@ class CelestialHNNTrainer:
         torch.manual_seed(seed)
         
         t_dense = torch.linspace(0, self.system.T_max, 2500, device=self.device)
-        self.orbit_z = self.system.ground_truth_trajectory(t_dense) # (2500, 2d)
-        self.orbit_dz = self.system.canonical_derivatives(self.orbit_z) # (2500, 2d)
-        self.orbit_H = self.system.exact_hamiltonian(self.orbit_z) # (2500, 1)
+        self.orbit_z = self.system.ground_truth_trajectory(t_dense)
+        self.orbit_dz = self.system.canonical_derivatives(self.orbit_z)
+        self.orbit_H = self.system.exact_hamiltonian(self.orbit_z)
 
     def train_baseline_mlp(
         self,
         hidden_dim: int = 128,
         layers: int = 4,
-        epochs: int = 1500,
+        epochs: int = 1200,
         lr: float = 2e-3,
-        n_samples: int = 4096,
+        n_samples: int = 2048,
     ) -> Tuple[nn.Module, Dict]:
         print(f"\n--- Training Standard Vector Field Baseline for {self.system.name} ---")
         model = BaselineVectorFieldMLP(self.system.state_dim, hidden_dim, layers).to(self.device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
         
+        loss_history = []
+        epochs_logged = []
+        
         start_time = time.time()
         for epoch in range(1, epochs + 1):
             model.train()
             optimizer.zero_grad()
             
-            # Orbit manifold batch + Domain batch
             idx_orbit = torch.randint(0, len(self.orbit_z), (n_samples // 2,), device=self.device)
             z_orb = self.orbit_z[idx_orbit]
             dz_orb = self.orbit_dz[idx_orbit]
@@ -88,21 +90,33 @@ class CelestialHNNTrainer:
             optimizer.step()
             scheduler.step()
             
+            if epoch % 10 == 0 or epoch == epochs:
+                loss_history.append(loss.item())
+                epochs_logged.append(epoch)
+            
             if epoch % 300 == 0 or epoch == epochs:
                 print(f"  [Standard MLP Epoch {epoch:4d}/{epochs}] Field Loss: {loss.item():.6e}")
                 
         rel_l2 = self.system.compute_trajectory_error(model)
         elapsed = time.time() - start_time
         print(f"  [+] Standard Baseline Complete! Trajectory Rel L2: {rel_l2*100:.3f}% | Time: {elapsed:.1f}s")
-        return model, {"final_loss": loss.item(), "rel_l2_error": rel_l2, "time": elapsed}
+        return model, {
+            "final_loss": loss.item(),
+            "rel_l2_error": rel_l2,
+            "time": elapsed,
+            "epochs_logged": epochs_logged,
+            "loss_history": loss_history
+        }
 
     def train_hnn(
         self,
         hidden_dim: int = 128,
         layers: int = 4,
-        epochs: int = 1500,
+        epochs: int = 1200,
         lr: float = 2e-3,
-        n_samples: int = 4096,
+        n_samples: int = 2048,
+        use_lbfgs: bool = False,
+        lbfgs_steps: int = 50,
     ) -> Tuple[nn.Module, Dict]:
         print(f"\n--- Training Symplectic Hamiltonian Neural Network (HNN) for {self.system.name} ---")
         model = HamiltonianNeuralNetwork(
@@ -115,12 +129,16 @@ class CelestialHNNTrainer:
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-6)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-5)
         
+        field_loss_history = []
+        energy_loss_history = []
+        total_loss_history = []
+        epochs_logged = []
+        
         start_time = time.time()
         for epoch in range(1, epochs + 1):
             model.train()
             optimizer.zero_grad()
             
-            # High-priority orbit manifold (80% orbit, 20% exploration)
             n_orb = int(n_samples * 0.80)
             n_rand = n_samples - n_orb
             
@@ -134,24 +152,56 @@ class CelestialHNNTrainer:
             z_batch = torch.cat([z_orb, z_rand], dim=0)
             dz_true = torch.cat([dz_orb, dz_rand], dim=0)
             
-            # Vector field symplectic gradient matching
             dz_pred = model.time_derivative(z_batch, create_graph=True)
             loss_field = torch.mean((dz_pred - dz_true) ** 2)
             
-            # Energy surface anchoring along the orbit manifold
             H_pred = model.hamiltonian(z_orb)
             loss_energy = torch.mean((H_pred - H_orb_true) ** 2)
             
-            total_loss = loss_field + 0.50 * loss_energy
+            total_loss = loss_field + 0.20 * loss_energy
             total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             scheduler.step()
             
+            if epoch % 10 == 0 or epoch == epochs:
+                field_loss_history.append(loss_field.item())
+                energy_loss_history.append(loss_energy.item())
+                total_loss_history.append(total_loss.item())
+                epochs_logged.append(epoch)
+            
             if epoch % 300 == 0 or epoch == epochs:
                 print(f"  [HNN Symplectic Epoch {epoch:4d}/{epochs}] Symplectic Field Loss: {loss_field.item():.6e} | Energy Loss: {loss_energy.item():.6e}")
+        
+        # Optional Stage 2: L-BFGS Quasi-Newton Fine-Tuning
+        if use_lbfgs:
+            print(f"  --> Executing Stage 2 L-BFGS Fine-Tuning ({lbfgs_steps} steps)...")
+            lbfgs_opt = torch.optim.LBFGS(model.parameters(), lr=0.5, max_iter=lbfgs_steps, history_size=10, line_search_fn="strong_wolfe")
+            
+            def lbfgs_closure():
+                lbfgs_opt.zero_grad()
+                dz_p = model.time_derivative(self.orbit_z, create_graph=True)
+                lf = torch.mean((dz_p - self.orbit_dz) ** 2)
+                hp = model.hamiltonian(self.orbit_z)
+                le = torch.mean((hp - self.orbit_H) ** 2)
+                tot = lf + 0.20 * le
+                tot.backward()
+                return tot
+            
+            lbfgs_opt.step(lbfgs_closure)
+            post_loss = lbfgs_closure().item()
+            print(f"  [+] L-BFGS Complete! Final Loss: {post_loss:.6e}")
+            total_loss = torch.tensor(post_loss)
                 
         rel_l2 = self.system.compute_trajectory_error(model)
         elapsed = time.time() - start_time
         print(f"  [+] HNN Symplectic Complete! Trajectory Rel L2: {rel_l2*100:.4f}% | Time: {elapsed:.1f}s")
-        return model, {"final_loss": total_loss.item(), "rel_l2_error": rel_l2, "time": elapsed}
+        return model, {
+            "final_loss": total_loss.item(),
+            "rel_l2_error": rel_l2,
+            "time": elapsed,
+            "epochs_logged": epochs_logged,
+            "field_loss_history": field_loss_history,
+            "energy_loss_history": energy_loss_history,
+            "total_loss_history": total_loss_history,
+        }
