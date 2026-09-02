@@ -8,7 +8,7 @@ from ..models.hnn import HamiltonianNeuralNetwork
 from ..physics.base_hamiltonian import BaseHamiltonianSystem
 
 class BaselineVectorFieldMLP(nn.Module):
-    """Non-Hamiltonian Standard Vector Field Network (Predicts dz/dt directly without Symplectic structure)."""
+    """Non-Hamiltonian Standard Vector Field Network."""
     def __init__(self, state_dim: int, hidden_dim: int = 128, layers: int = 4):
         super().__init__()
         self.state_dim = state_dim
@@ -40,7 +40,7 @@ class BaselineVectorFieldMLP(nn.Module):
 
 class CelestialHNNTrainer:
     """
-    Symplectic Hamiltonian Neural Network Benchmark Trainer with Trajectory Rollout.
+    Symplectic Hamiltonian Neural Network Benchmark Trainer with Orbit-Manifold Loss.
     """
     def __init__(self, system: BaseHamiltonianSystem, device: Optional[torch.device] = None, seed: int = 42):
         self.system = system
@@ -48,10 +48,10 @@ class CelestialHNNTrainer:
         self.seed = seed
         torch.manual_seed(seed)
         
-        # Pre-sample dense reference orbit data for high-precision trajectory anchoring
-        t_dense = torch.linspace(0, self.system.T_max, 2000, device=self.device)
-        self.orbit_z = self.system.ground_truth_trajectory(t_dense) # (2000, 2d)
-        self.orbit_dz = self.system.canonical_derivatives(self.orbit_z) # (2000, 2d)
+        t_dense = torch.linspace(0, self.system.T_max, 2500, device=self.device)
+        self.orbit_z = self.system.ground_truth_trajectory(t_dense) # (2500, 2d)
+        self.orbit_dz = self.system.canonical_derivatives(self.orbit_z) # (2500, 2d)
+        self.orbit_H = self.system.exact_hamiltonian(self.orbit_z) # (2500, 1)
 
     def train_baseline_mlp(
         self,
@@ -71,14 +71,15 @@ class CelestialHNNTrainer:
             model.train()
             optimizer.zero_grad()
             
-            # Mix random domain samples with orbit samples
-            z_rand, dz_rand = self.system.sample_phase_space(n_samples // 2)
+            # Orbit manifold batch + Domain batch
             idx_orbit = torch.randint(0, len(self.orbit_z), (n_samples // 2,), device=self.device)
             z_orb = self.orbit_z[idx_orbit]
             dz_orb = self.orbit_dz[idx_orbit]
             
-            z_batch = torch.cat([z_rand, z_orb], dim=0)
-            dz_true = torch.cat([dz_rand, dz_orb], dim=0)
+            z_rand, dz_rand = self.system.sample_phase_space(n_samples // 2)
+            
+            z_batch = torch.cat([z_orb, z_rand], dim=0)
+            dz_true = torch.cat([dz_orb, dz_rand], dim=0)
             
             dz_pred = model.time_derivative(z_batch)
             loss = torch.mean((dz_pred - dz_true) ** 2)
@@ -119,25 +120,30 @@ class CelestialHNNTrainer:
             model.train()
             optimizer.zero_grad()
             
-            # Mix domain samples with orbit samples
-            z_rand, dz_rand = self.system.sample_phase_space(n_samples // 2)
-            idx_orbit = torch.randint(0, len(self.orbit_z), (n_samples // 2,), device=self.device)
+            # High-priority orbit manifold (80% orbit, 20% exploration)
+            n_orb = int(n_samples * 0.80)
+            n_rand = n_samples - n_orb
+            
+            idx_orbit = torch.randint(0, len(self.orbit_z), (n_orb,), device=self.device)
             z_orb = self.orbit_z[idx_orbit]
             dz_orb = self.orbit_dz[idx_orbit]
+            H_orb_true = self.orbit_H[idx_orbit]
             
-            z_batch = torch.cat([z_rand, z_orb], dim=0)
-            dz_true = torch.cat([dz_rand, dz_orb], dim=0)
+            z_rand, dz_rand = self.system.sample_phase_space(n_rand)
             
+            z_batch = torch.cat([z_orb, z_rand], dim=0)
+            dz_true = torch.cat([dz_orb, dz_rand], dim=0)
+            
+            # Vector field symplectic gradient matching
             dz_pred = model.time_derivative(z_batch, create_graph=True)
             loss_field = torch.mean((dz_pred - dz_true) ** 2)
             
-            # Energy conservation regularization: H(z(t)) must be close to exact H(z(t))
+            # Energy surface anchoring along the orbit manifold
             H_pred = model.hamiltonian(z_orb)
-            H_true = self.system.exact_hamiltonian(z_orb)
-            loss_energy = torch.mean((H_pred - H_true) ** 2)
+            loss_energy = torch.mean((H_pred - H_orb_true) ** 2)
             
-            loss = loss_field + 0.10 * loss_energy
-            loss.backward()
+            total_loss = loss_field + 0.50 * loss_energy
+            total_loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             scheduler.step()
@@ -148,4 +154,4 @@ class CelestialHNNTrainer:
         rel_l2 = self.system.compute_trajectory_error(model)
         elapsed = time.time() - start_time
         print(f"  [+] HNN Symplectic Complete! Trajectory Rel L2: {rel_l2*100:.4f}% | Time: {elapsed:.1f}s")
-        return model, {"final_loss": loss.item(), "rel_l2_error": rel_l2, "time": elapsed}
+        return model, {"final_loss": total_loss.item(), "rel_l2_error": rel_l2, "time": elapsed}

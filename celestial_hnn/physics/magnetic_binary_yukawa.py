@@ -20,9 +20,9 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
         M1: float = 0.05,
         M2: float = 0.03,
         n: float = 1.0,
-        eps: float = 0.15,
-        T_max: float = 6.0,
-        x_init: Tuple[float, float, float, float] = (0.45, 0.30, 0.10, 0.35),
+        eps: float = 0.30,
+        T_max: float = 3.0,
+        x_init: Tuple[float, float, float, float] = (0.70, 0.40, 0.10, 0.40),
         device: Optional[torch.device] = None,
     ):
         self.mu = mu
@@ -50,7 +50,7 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
             name="MagneticYukawaHamiltonianSystem",
             spatial_dim=2,
             bounds_q=[(-2.0, 2.0), (-2.0, 2.0)],
-            bounds_p=[(-2.0, 2.0), (-2.0, 2.0)],
+            bounds_p=[(-3.0, 3.0), (-3.0, 3.0)],
             z0=z0_t,
             T_max=T_max,
             device=device,
@@ -58,23 +58,13 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
         self._precompute_reference_solution()
 
     def sample_phase_space(self, n_samples: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Samples phase space ensuring points stay outside the hard collision core (r > eps)."""
-        valid_z = []
-        while len(valid_z) < n_samples:
-            batch_size = n_samples * 2
-            x = (self.bounds_q[0][1] - self.bounds_q[0][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_q[0][0]
-            y = (self.bounds_q[1][1] - self.bounds_q[1][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_q[1][0]
-            px = (self.bounds_p[0][1] - self.bounds_p[0][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_p[0][0]
-            py = (self.bounds_p[1][1] - self.bounds_p[1][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_p[1][0]
-            
-            r1 = torch.sqrt((x - self.x1)**2 + y**2)
-            r2 = torch.sqrt((x - self.x2)**2 + y**2)
-            mask = (r1 > self.eps) & (r2 > self.eps)
-            
-            z_batch = torch.cat([x[mask].reshape(-1, 1), y[mask].reshape(-1, 1), px[mask].reshape(-1, 1), py[mask].reshape(-1, 1)], dim=-1)
-            valid_z.append(z_batch)
-            
-        z = torch.cat(valid_z, dim=0)[:n_samples]
+        """Vectorized phase space sampling."""
+        x = (self.bounds_q[0][1] - self.bounds_q[0][0]) * torch.rand(n_samples, 1, device=self.device) + self.bounds_q[0][0]
+        y = (self.bounds_q[1][1] - self.bounds_q[1][0]) * torch.rand(n_samples, 1, device=self.device) + self.bounds_q[1][0]
+        px = (self.bounds_p[0][1] - self.bounds_p[0][0]) * torch.rand(n_samples, 1, device=self.device) + self.bounds_p[0][0]
+        py = (self.bounds_p[1][1] - self.bounds_p[1][0]) * torch.rand(n_samples, 1, device=self.device) + self.bounds_p[1][0]
+        
+        z = torch.cat([x, y, px, py], dim=-1)
         dz_dt = self.canonical_derivatives(z)
         return z, dz_dt
 

@@ -1,0 +1,13 @@
+{
+  "system": "MagneticYukawaHamiltonianSystem",
+  "standard_mlp": {
+    "final_loss": 0.01709577813744545,
+    "rel_l2_error": 0.03361460566520691,
+    "time": 8.024217367172241
+  },
+  "hnn_symplectic": {
+    "final_loss": 0.006053248420357704,
+    "rel_l2_error": 0.09007618576288223,
+    "time": 16.34919810295105
+  }
+}
