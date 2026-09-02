@@ -1,0 +1,13 @@
+{
+  "system": "BinaryQuasarHamiltonianSystem",
+  "standard_mlp": {
+    "final_loss": 0.10742228478193283,
+    "rel_l2_error": 0.6075764298439026,
+    "time": 8.684494733810425
+  },
+  "hnn_symplectic": {
+    "final_loss": 0.00480226194486022,
+    "rel_l2_error": 0.6405690312385559,
+    "time": 14.263635158538818
+  }
+}

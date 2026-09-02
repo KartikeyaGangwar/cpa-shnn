@@ -1,1 +1,0 @@
-"""Celestial PINN Benchmark Suite."""
