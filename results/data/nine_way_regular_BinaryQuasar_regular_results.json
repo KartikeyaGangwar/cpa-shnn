@@ -1,0 +1,11 @@
+{
+  "1_Standard_PINN_MLP": 96.91014885902405,
+  "2_Vanilla_HNN_2019": 372.95243740081787,
+  "3_CPA_SHNN_Core": 4.3135397136211395,
+  "4_Theorem1_Separable": 212.31951713562012,
+  "5_Theorem2_ExtendedSpace": 276.3423681259155,
+  "6_Theorem3_GeneratingMap": 119.44378614425659,
+  "7_Combo_1_plus_3": 245.40400505065918,
+  "8_Combo_2_plus_3": 110.04863977432251,
+  "9_Combo_1_2_3_Unified": 427.73141860961914
+}
