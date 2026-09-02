@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import time
 from typing import Dict, Any, Tuple, Optional, List
+from celestial_hnn.models.structured_separable_hnn import StructuredSeparableHNN
 from celestial_hnn.models.hnn import HamiltonianNeuralNetwork
 from celestial_hnn.physics.base_hamiltonian import BaseHamiltonianSystem
 
@@ -30,8 +31,10 @@ class AdaptiveTimeMarchingHNNTrainer:
         self.device = device if device is not None else system.device
         self.spatial_dim = system.spatial_dim
         
-        self.hnn = HamiltonianNeuralNetwork(
+        n_coriolis = getattr(system, "n", 1.0) if self.spatial_dim == 2 else 0.0
+        self.hnn = StructuredSeparableHNN(
             spatial_dim=self.spatial_dim,
+            n_coriolis=n_coriolis,
             hidden_dim=hidden_dim,
             layers=layers,
         ).to(self.device)
