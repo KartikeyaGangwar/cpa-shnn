@@ -1,0 +1,5 @@
+Benchmark System,Standard MLP Loss,HNN Symplectic Loss,Standard MLP Rel L2,HNN Symplectic Rel L2,Trajectory Accuracy Gain
+BinaryQuasarHamiltonianSystem,2.366e-01,6.444e-02,48.18%,35.199%,+26.9%
+RestrictedSixBodyHamiltonianSystem,1.239e-01,4.055e-02,97.17%,48.591%,+50.0%
+SitnikovFiveBodyHamiltonianSystem,6.316e-05,6.941e-04,83.20%,87.153%,-4.7%
+MagneticYukawaHamiltonianSystem,2.288e-02,6.287e-03,4.15%,1.271%,+69.4%
