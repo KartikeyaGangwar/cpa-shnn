@@ -1,0 +1,46 @@
+{
+  "title": "System 4: Magnetic Yukawa",
+  "system_name": "MagneticYukawa_regular",
+  "regime": "regular",
+  "n_windows": 2,
+  "standard_mlp": {
+    "final_loss": 2.2111949920654297,
+    "rel_l2_error": 1.100352168083191,
+    "time": 3.1865012645721436,
+    "epochs_logged": [
+      4
+    ],
+    "loss_history": [
+      2.2111949920654297
+    ]
+  },
+  "adaptive_time_marching_hnn": {
+    "system": "MagneticYukawa_regular",
+    "regime": "regular",
+    "n_windows": 2,
+    "final_field_loss": 4.092124938964844,
+    "final_energy_loss": 2.626401424407959,
+    "rel_l2_error": 1.488200306892395,
+    "energy_drift_rel": 0.058873943984508514,
+    "training_time_seconds": 1.5572335720062256,
+    "epochs_logged": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "field_loss_history": [
+      2.868541717529297,
+      3.060059070587158,
+      2.524735450744629,
+      4.092124938964844
+    ],
+    "energy_loss_history": [
+      2.939587354660034,
+      0.7490549087524414,
+      0.598259687423706,
+      2.626401424407959
+    ]
+  },
+  "trajectory_accuracy_gain_pct": -35.24763708012081
+}

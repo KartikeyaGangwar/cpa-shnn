@@ -1,0 +1,5 @@
+Benchmark System,Regime,Windows,Standard MLP Rel L2,Adaptive HNN Rel L2,Accuracy Gain,Energy Drift,Runtime (s)
+BinaryQuasar_regular,regular,2,85.90%,39.604%,+53.9%,3.0066%,1.9s
+RestrictedSixBody_regular,regular,2,141.12%,13.995%,+90.1%,0.5110%,2.0s
+SitnikovFiveBody_regular,regular,2,122.36%,130.235%,-6.4%,4.7816%,1.5s
+MagneticYukawa_regular,regular,2,110.04%,148.820%,-35.2%,5.8874%,1.6s

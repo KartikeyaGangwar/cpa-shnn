@@ -1,0 +1,46 @@
+{
+  "title": "System 1: Binary Quasar",
+  "system_name": "BinaryQuasar_regular",
+  "regime": "regular",
+  "n_windows": 2,
+  "standard_mlp": {
+    "final_loss": 0.923471987247467,
+    "rel_l2_error": 0.8589884042739868,
+    "time": 3.9379656314849854,
+    "epochs_logged": [
+      4
+    ],
+    "loss_history": [
+      0.923471987247467
+    ]
+  },
+  "adaptive_time_marching_hnn": {
+    "system": "BinaryQuasar_regular",
+    "regime": "regular",
+    "n_windows": 2,
+    "final_field_loss": 2.5985755920410156,
+    "final_energy_loss": 2.188403606414795,
+    "rel_l2_error": 0.3960421681404114,
+    "energy_drift_rel": 0.03006563149392605,
+    "training_time_seconds": 1.8584673404693604,
+    "epochs_logged": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "field_loss_history": [
+      0.8451033234596252,
+      1.115641713142395,
+      0.6801267266273499,
+      2.5985755920410156
+    ],
+    "energy_loss_history": [
+      2.640688419342041,
+      0.18220075964927673,
+      0.006120932288467884,
+      2.188403606414795
+    ]
+  },
+  "trajectory_accuracy_gain_pct": 53.89435222060484
+}
