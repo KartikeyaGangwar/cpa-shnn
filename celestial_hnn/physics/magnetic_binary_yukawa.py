@@ -20,7 +20,7 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
         M1: float = 0.05,
         M2: float = 0.03,
         n: float = 1.0,
-        eps: float = 0.10,
+        eps: float = 0.15,
         T_max: float = 6.0,
         x_init: Tuple[float, float, float, float] = (0.45, 0.30, 0.10, 0.35),
         device: Optional[torch.device] = None,
@@ -35,6 +35,7 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
         self.M1 = M1
         self.M2 = M2
         self.n = n
+        self.eps = eps
         self.eps_sq = eps ** 2
         self.x1 = -mu
         self.x2 = 1.0 - mu
@@ -55,6 +56,27 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
             device=device,
         )
         self._precompute_reference_solution()
+
+    def sample_phase_space(self, n_samples: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Samples phase space ensuring points stay outside the hard collision core (r > eps)."""
+        valid_z = []
+        while len(valid_z) < n_samples:
+            batch_size = n_samples * 2
+            x = (self.bounds_q[0][1] - self.bounds_q[0][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_q[0][0]
+            y = (self.bounds_q[1][1] - self.bounds_q[1][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_q[1][0]
+            px = (self.bounds_p[0][1] - self.bounds_p[0][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_p[0][0]
+            py = (self.bounds_p[1][1] - self.bounds_p[1][0]) * torch.rand(batch_size, 1, device=self.device) + self.bounds_p[1][0]
+            
+            r1 = torch.sqrt((x - self.x1)**2 + y**2)
+            r2 = torch.sqrt((x - self.x2)**2 + y**2)
+            mask = (r1 > self.eps) & (r2 > self.eps)
+            
+            z_batch = torch.cat([x[mask].reshape(-1, 1), y[mask].reshape(-1, 1), px[mask].reshape(-1, 1), py[mask].reshape(-1, 1)], dim=-1)
+            valid_z.append(z_batch)
+            
+        z = torch.cat(valid_z, dim=0)[:n_samples]
+        dz_dt = self.canonical_derivatives(z)
+        return z, dz_dt
 
     def coupled_potential(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         r1_sq = (x - self.x1) ** 2 + y ** 2 + self.eps_sq

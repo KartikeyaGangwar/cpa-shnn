@@ -1,6 +1,7 @@
 import time
 import copy
 from typing import Dict, Tuple, Optional
+import numpy as np
 import torch
 import torch.nn as nn
 from ..models.hnn import HamiltonianNeuralNetwork
@@ -39,14 +40,18 @@ class BaselineVectorFieldMLP(nn.Module):
 
 class CelestialHNNTrainer:
     """
-    Symplectic Hamiltonian Neural Network Benchmark Trainer.
-    Compares Standard Vector Field MLP vs Exact Symplectic HNN.
+    Symplectic Hamiltonian Neural Network Benchmark Trainer with Trajectory Rollout.
     """
     def __init__(self, system: BaseHamiltonianSystem, device: Optional[torch.device] = None, seed: int = 42):
         self.system = system
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.seed = seed
         torch.manual_seed(seed)
+        
+        # Pre-sample dense reference orbit data for high-precision trajectory anchoring
+        t_dense = torch.linspace(0, self.system.T_max, 2000, device=self.device)
+        self.orbit_z = self.system.ground_truth_trajectory(t_dense) # (2000, 2d)
+        self.orbit_dz = self.system.canonical_derivatives(self.orbit_z) # (2000, 2d)
 
     def train_baseline_mlp(
         self,
@@ -66,7 +71,15 @@ class CelestialHNNTrainer:
             model.train()
             optimizer.zero_grad()
             
-            z_batch, dz_true = self.system.sample_phase_space(n_samples)
+            # Mix random domain samples with orbit samples
+            z_rand, dz_rand = self.system.sample_phase_space(n_samples // 2)
+            idx_orbit = torch.randint(0, len(self.orbit_z), (n_samples // 2,), device=self.device)
+            z_orb = self.orbit_z[idx_orbit]
+            dz_orb = self.orbit_dz[idx_orbit]
+            
+            z_batch = torch.cat([z_rand, z_orb], dim=0)
+            dz_true = torch.cat([dz_rand, dz_orb], dim=0)
+            
             dz_pred = model.time_derivative(z_batch)
             loss = torch.mean((dz_pred - dz_true) ** 2)
             
@@ -106,18 +119,31 @@ class CelestialHNNTrainer:
             model.train()
             optimizer.zero_grad()
             
-            z_batch, dz_true = self.system.sample_phase_space(n_samples)
-            dz_pred = model.time_derivative(z_batch)
+            # Mix domain samples with orbit samples
+            z_rand, dz_rand = self.system.sample_phase_space(n_samples // 2)
+            idx_orbit = torch.randint(0, len(self.orbit_z), (n_samples // 2,), device=self.device)
+            z_orb = self.orbit_z[idx_orbit]
+            dz_orb = self.orbit_dz[idx_orbit]
+            
+            z_batch = torch.cat([z_rand, z_orb], dim=0)
+            dz_true = torch.cat([dz_rand, dz_orb], dim=0)
+            
+            dz_pred = model.time_derivative(z_batch, create_graph=True)
             loss_field = torch.mean((dz_pred - dz_true) ** 2)
             
-            loss = loss_field
+            # Energy conservation regularization: H(z(t)) must be close to exact H(z(t))
+            H_pred = model.hamiltonian(z_orb)
+            H_true = self.system.exact_hamiltonian(z_orb)
+            loss_energy = torch.mean((H_pred - H_true) ** 2)
+            
+            loss = loss_field + 0.10 * loss_energy
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
             optimizer.step()
             scheduler.step()
             
             if epoch % 300 == 0 or epoch == epochs:
-                print(f"  [HNN Symplectic Epoch {epoch:4d}/{epochs}] Symplectic Field Loss: {loss.item():.6e}")
+                print(f"  [HNN Symplectic Epoch {epoch:4d}/{epochs}] Symplectic Field Loss: {loss_field.item():.6e} | Energy Loss: {loss_energy.item():.6e}")
                 
         rel_l2 = self.system.compute_trajectory_error(model)
         elapsed = time.time() - start_time

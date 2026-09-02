@@ -7,20 +7,22 @@ from .base_hamiltonian import BaseHamiltonianSystem
 
 class SitnikovFiveBodyHamiltonianSystem(BaseHamiltonianSystem):
     """
-    System III: Elliptic Sitnikov Five-Body Problem in Hamiltonian Mechanics
+    System III: Elliptic Sitnikov Five-Body Problem in Canonical Phase Space
     Reference: Ullah, M. S., Idrisi, M. J., Kumar, V. (New Astronomy, 2020: 101398)
     """
     def __init__(
         self,
-        eccentricity: float = 0.20,
+        eccentricity: float = 0.15,
         radiation_q: float = 0.85,
         V_max: float = 6.283185,
-        z_init: Tuple[float, float] = (0.50, 0.0),
+        z_init: Tuple[float, float] = (0.40, 0.0),
         device: Optional[torch.device] = None,
     ):
         self.e = eccentricity
         self.q = radiation_q
         self.z_init = z_init
+        self.r0_sq = 0.5 * ((1.0 - self.e ** 2) ** 2)
+        
         z0, vz0 = z_init
         z0_t = torch.tensor([z0, vz0], dtype=torch.float32)
         
@@ -28,7 +30,7 @@ class SitnikovFiveBodyHamiltonianSystem(BaseHamiltonianSystem):
             name="SitnikovFiveBodyHamiltonianSystem",
             spatial_dim=1,
             bounds_q=[(-1.5, 1.5)],
-            bounds_p=[(-2.0, 2.0)],
+            bounds_p=[(-1.5, 1.5)],
             z0=z0_t,
             T_max=V_max,
             device=device,
@@ -41,16 +43,14 @@ class SitnikovFiveBodyHamiltonianSystem(BaseHamiltonianSystem):
     def exact_hamiltonian(self, z: torch.Tensor) -> torch.Tensor:
         pos_z = z[:, 0:1]
         pz = z[:, 1:2]
-        r0 = 1.0 - self.e ** 2
-        potential = -4.0 * self.q / torch.sqrt(pos_z ** 2 + 0.5 * (r0 ** 2))
+        potential = -4.0 * self.q / torch.sqrt(pos_z ** 2 + self.r0_sq)
         return 0.5 * (pz ** 2) + potential
 
     def canonical_derivatives(self, z: torch.Tensor) -> torch.Tensor:
         pos_z = z[:, 0:1]
         pz = z[:, 1:2]
-        r0 = 1.0 - self.e ** 2
         dz_dt = pz
-        force_z = -4.0 * self.q * pos_z / ((pos_z ** 2 + 0.5 * (r0 ** 2)) ** 1.5)
+        force_z = -4.0 * self.q * pos_z / ((pos_z ** 2 + self.r0_sq) ** 1.5)
         dpz_dt = force_z
         return torch.cat([dz_dt, dpz_dt], dim=-1)
 
