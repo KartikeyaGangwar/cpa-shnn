@@ -8,19 +8,19 @@ from celestial_hnn.physics.base_hamiltonian import BaseHamiltonianSystem
 
 class AdaptiveTimeMarchingHNNTrainer:
     """
-    Causality-Preserving Adaptive Energy-Guided Time-Marching HNN Trainer.
+    Ultra-Tight Causality-Preserving Adaptive Energy-Guided Time-Marching HNN Trainer.
     
-    Key Mechanisms:
-    1. Progressive Temporal Causality Windows: Trains sequentially across [0, t_1] -> [0, t_2] -> ... -> [0, T_max].
-    2. Energy-Curvature Spike Detection: Detects high-gradient chaotic close encounters.
-    3. Dynamic Collocation Densification: Adapts sample density based on force curvature.
-    4. Adaptive Symplectic Energy Regularization: Dynamically scales lambda_H during chaotic spikes.
-    5. Two-Stage AdamW + L-BFGS Optimization per temporal horizon.
+    Key Tightened Features:
+    1. Multi-Stage Progressive Temporal Windows: Finer resolution (e.g. 6-8 windows).
+    2. Dense Trajectory-Tube Collocation (3500+ points on continuous manifold + micro-tube noise).
+    3. Aggressive Second-Order L-BFGS Optimization: history_size=50, max_iter=60+, strong_wolfe line search.
+    4. Escalating Symplectic Energy Invariance Penalty: lambda_H strictly enforces dH/dt -> 0.
+    5. Curvature-Weighted Sampling: Extra density at maximum force / acceleration spikes.
     """
     def __init__(
         self,
         system: BaseHamiltonianSystem,
-        n_windows: int = 4,
+        n_windows: int = 6,
         hidden_dim: int = 256,
         layers: int = 4,
         device: Optional[torch.device] = None,
@@ -38,14 +38,15 @@ class AdaptiveTimeMarchingHNNTrainer:
 
     def train_adaptive_time_marching(
         self,
-        epochs_per_window: int = 300,
+        epochs_per_window: int = 400,
         lr: float = 3e-3,
         use_lbfgs: bool = True,
-        lbfgs_max_iter: int = 40,
+        lbfgs_max_iter: int = 60,
+        tube_noise_std: float = 0.03,
         verbose: bool = True,
     ) -> Tuple[HamiltonianNeuralNetwork, Dict[str, Any]]:
         """
-        Executes progressive time-marching training across adaptive temporal horizons.
+        Executes tightened progressive time-marching training across adaptive temporal horizons.
         """
         start_time = time.time()
         
@@ -60,41 +61,41 @@ class AdaptiveTimeMarchingHNNTrainer:
         
         for win_idx, t_k in enumerate(t_horizons, 1):
             if verbose:
-                print(f"\n--- [Adaptive Time-Marching Window {win_idx}/{self.n_windows}] Horizon: t in [0.0, {t_k:.2f}] ---")
+                print(f"\n--- [Tight Adaptive Time-Marching Window {win_idx}/{self.n_windows}] Horizon: t in [0.0, {t_k:.2f}] ---")
             
-            # Collocate continuous trajectory within current temporal window [0, t_k]
-            n_colloc = max(500, int(2000 * (t_k / self.system.T_max)))
+            # Dense trajectory collocation within current temporal window [0, t_k]
+            n_colloc = max(800, int(3500 * (t_k / self.system.T_max)))
             t_span_win = torch.linspace(0, t_k, n_colloc, device=self.device)
             z_orb = self.system.ground_truth_trajectory(t_span_win)
             dz_true = self.system.canonical_derivatives(z_orb)
             H_exact = self.system.exact_hamiltonian(z_orb)
             
-            # Energy-Curvature Spike Detection: Compute force magnitude
-            force_mag = torch.norm(dz_true[:, self.spatial_dim:], dim=-1) # (N,)
-            weights = (force_mag / (torch.mean(force_mag) + 1e-6)).clamp(min=0.5, max=5.0)
+            # Curvature-Spike Detection: Compute instantaneous force magnitude
+            force_mag = torch.norm(dz_true[:, self.spatial_dim:], dim=-1)
+            weights = (force_mag / (torch.mean(force_mag) + 1e-6)).clamp(min=0.5, max=6.0)
             sampling_probs = (weights / torch.sum(weights)).detach().cpu().numpy()
             
-            # Adaptive Energy Regularization Weight
-            lambda_H = 0.50 if win_idx == 1 else 1.0 + 0.5 * win_idx
+            # Escalating Symplectic Energy Regularization Weight
+            lambda_H = 1.0 + 1.0 * win_idx
             
             optimizer = torch.optim.AdamW(self.hnn.parameters(), lr=lr, weight_decay=1e-6)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs_per_window, eta_min=1e-5)
             
-            # Stage 1: AdamW within window [0, t_k]
+            # Stage 1: AdamW with Trajectory-Tube Neighborhood Collocation
             for ep in range(1, epochs_per_window + 1):
                 total_epochs += 1
                 optimizer.zero_grad()
                 
-                # Curvature-weighted sampling
-                batch_size = min(1024, len(z_orb))
+                batch_size = min(1536, len(z_orb))
                 sample_indices = np.random.choice(len(z_orb), size=batch_size, p=sampling_probs)
                 z_b = z_orb[sample_indices]
                 dz_b = dz_true[sample_indices]
                 H_b = H_exact[sample_indices]
                 
-                # Trajectory-tube manifold regularization
-                z_tube = z_b + torch.randn_like(z_b) * 0.05
+                # Trajectory-tube manifold regularization (small Gaussian tube perturbation)
+                z_tube = z_b + torch.randn_like(z_b) * tube_noise_std
                 dz_tube = self.system.canonical_derivatives(z_tube)
+                
                 z_all = torch.cat([z_b, z_tube], dim=0)
                 dz_all = torch.cat([dz_b, dz_tube], dim=0)
                 
@@ -115,15 +116,17 @@ class AdaptiveTimeMarchingHNNTrainer:
                     history_field_loss.append(loss_field.item())
                     history_energy_loss.append(loss_energy.item())
                     if verbose:
-                        print(f"  [Window {win_idx} | Ep {ep:4d}/{epochs_per_window}] Symplectic Field: {loss_field.item():.4e} | Energy Loss: {loss_energy.item():.4e}")
+                        print(f"  [Window {win_idx} | Ep {ep:4d}/{epochs_per_window}] Field Loss: {loss_field.item():.4e} | Energy Loss: {loss_energy.item():.4e}")
 
-            # Stage 2: L-BFGS Refinement for current horizon
+            # Stage 2: Aggressive Second-Order L-BFGS Refinement
             if use_lbfgs:
                 lbfgs = torch.optim.LBFGS(
                     self.hnn.parameters(),
                     lr=0.5,
                     max_iter=lbfgs_max_iter,
-                    history_size=20,
+                    history_size=50,
+                    tolerance_grad=1e-9,
+                    tolerance_change=1e-11,
                     line_search_fn="strong_wolfe",
                 )
                 def closure():
@@ -137,7 +140,7 @@ class AdaptiveTimeMarchingHNNTrainer:
                     return tot
                 lbfgs.step(closure)
                 if verbose:
-                    print(f"  [+] Window {win_idx} L-BFGS Refinement Loss: {closure().item():.6e}")
+                    print(f"  [+] Window {win_idx} Aggressive L-BFGS Refinement Loss: {closure().item():.6e}")
 
         elapsed_time = time.time() - start_time
         
@@ -166,8 +169,8 @@ class AdaptiveTimeMarchingHNNTrainer:
         }
         
         if verbose:
-            print("\n" + "="*70)
-            print(f"  [+] Adaptive Time-Marching Complete! Full Rel L2: {rel_l2_error*100:.3f}% | Energy Drift: {energy_drift_rel*100:.4f}% | Time: {elapsed_time:.1f}s")
-            print("="*70)
+            print("\n" + "="*75)
+            print(f"  [+] Tight Time-Marching Complete! Rel L2: {rel_l2_error*100:.3f}% | Energy Drift: {energy_drift_rel*100:.4f}% | Time: {elapsed_time:.1f}s")
+            print("="*75)
             
         return self.hnn, results

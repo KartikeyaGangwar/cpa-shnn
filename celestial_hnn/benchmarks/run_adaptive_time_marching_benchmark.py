@@ -31,8 +31,8 @@ plt.rcParams.update({
 
 def run_adaptive_time_marching_master_suite(
     regime: str = "chaotic",
-    epochs_per_window: int = 300,
-    n_windows: int = 4,
+    epochs_per_window: int = 500,
+    n_windows: int = 6,
     use_lbfgs: bool = True,
     save_plots: bool = True,
     out_data_dir: str = "results/data",
@@ -80,7 +80,7 @@ def run_adaptive_time_marching_master_suite(
         hnn_model, hnn_res = atm_trainer.train_adaptive_time_marching(
             epochs_per_window=epochs_per_window,
             use_lbfgs=use_lbfgs,
-            lbfgs_max_iter=30,
+            lbfgs_max_iter=60,
             verbose=True,
         )
         
@@ -215,4 +215,4 @@ def run_adaptive_time_marching_master_suite(
     return df
 
 if __name__ == "__main__":
-    run_adaptive_time_marching_master_suite(regime="chaotic", epochs_per_window=300, n_windows=4)
+    run_adaptive_time_marching_master_suite(regime="chaotic", epochs_per_window=500, n_windows=6)
