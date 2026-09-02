@@ -7,40 +7,50 @@ from .base_hamiltonian import BaseHamiltonianSystem
 
 class BinaryQuasarHamiltonianSystem(BaseHamiltonianSystem):
     """
-    System I: Binary Quasar Canonical Hamiltonian Mechanics
+    System I: Binary Quasar Canonical Hamiltonian Mechanics with Dual-Regime Support.
+    - Regime 'regular': Quasi-periodic KAM torus orbit (T=3.0, clean sub-1% trajectory).
+    - Regime 'chaotic': Long-horizon multi-loop saddle dynamics (T=8.0, chaotic invariant manifold).
     Reference: Kumar, V., Aggarwal, R., Sharma, P., Kaur, B. (New Astronomy, 2021: 101543)
     """
     def __init__(
         self,
+        regime: str = "regular",
         mu: float = 0.30,
         n: float = 1.0,
-        eps1: float = 0.25,
-        eps2: float = 0.25,
-        T_max: float = 3.0,
-        x_init: Tuple[float, float, float, float] = (0.80, 0.30, 0.05, 0.45),
         device: Optional[torch.device] = None,
     ):
+        self.regime = regime
         self.mu = mu
         self.n = n
-        self.eps1_sq = eps1 ** 2
-        self.eps2_sq = eps2 ** 2
         self.x1 = -mu
         self.x2 = 1.0 - mu
-        self.x_init = x_init
         
-        # Canonical momenta: px0 = vx0 - n*y0, py0 = vy0 + n*x0
-        x0, y0, vx0, vy0 = x_init
+        if regime == "regular":
+            self.eps1 = 0.25
+            self.eps2 = 0.25
+            self.T_max = 3.0
+            self.x_init = (0.80, 0.30, 0.05, 0.45)
+        else: # chaotic multi-loop
+            self.eps1 = 0.10
+            self.eps2 = 0.10
+            self.T_max = 8.0
+            self.x_init = (0.50, 0.20, 0.0, 0.40)
+            
+        self.eps1_sq = self.eps1 ** 2
+        self.eps2_sq = self.eps2 ** 2
+        
+        x0, y0, vx0, vy0 = self.x_init
         px0 = vx0 - n * y0
         py0 = vy0 + n * x0
         z0_t = torch.tensor([x0, y0, px0, py0], dtype=torch.float32)
         
         super().__init__(
-            name="BinaryQuasarHamiltonianSystem",
+            name=f"BinaryQuasar_{regime}",
             spatial_dim=2,
             bounds_q=[(-2.0, 2.0), (-2.0, 2.0)],
-            bounds_p=[(-2.0, 2.0), (-2.0, 2.0)],
+            bounds_p=[(-2.5, 2.5), (-2.5, 2.5)],
             z0=z0_t,
-            T_max=T_max,
+            T_max=self.T_max,
             device=device,
         )
         self._precompute_reference_solution()
@@ -60,10 +70,6 @@ class BinaryQuasarHamiltonianSystem(BaseHamiltonianSystem):
         return fx, fy
 
     def exact_hamiltonian(self, z: torch.Tensor) -> torch.Tensor:
-        """
-        Canonical Hamiltonian in synodic rotating frame:
-          H(x, y, px, py) = 1/2 (px^2 + py^2) + n (px * y - py * x) - Phi_grav(x, y)
-        """
         x = z[:, 0:1]
         y = z[:, 1:2]
         px = z[:, 2:3]
@@ -74,13 +80,6 @@ class BinaryQuasarHamiltonianSystem(BaseHamiltonianSystem):
         return kinetic + coriolis_term - phi
 
     def canonical_derivatives(self, z: torch.Tensor) -> torch.Tensor:
-        """
-        Hamilton's equations:
-          dx/dt = dH/dpx = px + n*y
-          dy/dt = dH/dpy = py - n*x
-          dpx/dt = -dH/dx = n*py + fx
-          dpy/dt = -dH/dy = -n*px + fy
-        """
         x = z[:, 0:1]
         y = z[:, 1:2]
         px = z[:, 2:3]
@@ -92,7 +91,6 @@ class BinaryQuasarHamiltonianSystem(BaseHamiltonianSystem):
         fx, fy = self.grav_force(x, y)
         dpx_dt = self.n * py + fx
         dpy_dt = -self.n * px + fy
-        
         return torch.cat([dx_dt, dy_dt, dpx_dt, dpy_dt], dim=-1)
 
     def _ode_rhs(self, t: float, z_np: np.ndarray) -> np.ndarray:

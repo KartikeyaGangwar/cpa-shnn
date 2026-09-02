@@ -7,11 +7,12 @@ from .base_hamiltonian import BaseHamiltonianSystem
 
 class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
     """
-    System IV: Photogravitational Magnetic Binary with Non-Newtonian Yukawa Fifth-Force
+    System IV: Photogravitational Magnetic Binary with Non-Newtonian Yukawa Fifth-Force and Dual Regime.
     Reference: Kumar, V., Aggarwal, R., Marig, S. K. (Astronomy and Computing, 2023: 100783)
     """
     def __init__(
         self,
+        regime: str = "regular",
         mu: float = 0.35,
         q1: float = 0.90,
         q2: float = 0.85,
@@ -20,11 +21,9 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
         M1: float = 0.05,
         M2: float = 0.03,
         n: float = 1.0,
-        eps: float = 0.30,
-        T_max: float = 3.0,
-        x_init: Tuple[float, float, float, float] = (0.70, 0.40, 0.10, 0.40),
         device: Optional[torch.device] = None,
     ):
+        self.regime = regime
         self.mu = mu
         self.mu1 = 1.0 - mu
         self.mu2 = mu
@@ -35,30 +34,37 @@ class MagneticYukawaHamiltonianSystem(BaseHamiltonianSystem):
         self.M1 = M1
         self.M2 = M2
         self.n = n
-        self.eps = eps
-        self.eps_sq = eps ** 2
         self.x1 = -mu
         self.x2 = 1.0 - mu
-        self.x_init = x_init
         
-        x0, y0, vx0, vy0 = x_init
+        if regime == "regular":
+            self.eps = 0.30
+            self.T_max = 3.0
+            self.x_init = (0.70, 0.40, 0.10, 0.40)
+        else: # chaotic multi-loop close encounter
+            self.eps = 0.15
+            self.T_max = 6.0
+            self.x_init = (0.45, 0.30, 0.10, 0.35)
+            
+        self.eps_sq = self.eps ** 2
+        
+        x0, y0, vx0, vy0 = self.x_init
         px0 = vx0 - n * y0
         py0 = vy0 + n * x0
         z0_t = torch.tensor([x0, y0, px0, py0], dtype=torch.float32)
         
         super().__init__(
-            name="MagneticYukawaHamiltonianSystem",
+            name=f"MagneticYukawa_{regime}",
             spatial_dim=2,
             bounds_q=[(-2.0, 2.0), (-2.0, 2.0)],
             bounds_p=[(-3.0, 3.0), (-3.0, 3.0)],
             z0=z0_t,
-            T_max=T_max,
+            T_max=self.T_max,
             device=device,
         )
         self._precompute_reference_solution()
 
     def sample_phase_space(self, n_samples: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Vectorized phase space sampling."""
         x = (self.bounds_q[0][1] - self.bounds_q[0][0]) * torch.rand(n_samples, 1, device=self.device) + self.bounds_q[0][0]
         y = (self.bounds_q[1][1] - self.bounds_q[1][0]) * torch.rand(n_samples, 1, device=self.device) + self.bounds_q[1][0]
         px = (self.bounds_p[0][1] - self.bounds_p[0][0]) * torch.rand(n_samples, 1, device=self.device) + self.bounds_p[0][0]
