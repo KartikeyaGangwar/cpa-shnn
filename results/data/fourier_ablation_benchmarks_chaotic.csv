@@ -1,0 +1,6 @@
+System,Regime,No_Fourier_Error,With_Fourier_Error,Improvement_Factor
+BinaryQuasar_chaotic,chaotic,80.60214519500732,53.96687984466553,1.49x
+RestrictedSixBody_chaotic,chaotic,218.02854537963867,11.385814845561981,19.15x
+MagneticYukawa_chaotic,chaotic,74.60914254188538,0.5902526900172234,126.40x
+EllipticSitnikov_NonAutonomous,chaotic,99.99787211418152,4.160948097705841,24.03x
+VariableMassMagneticBinary_NonAutonomous,chaotic,103.7259578704834,4.0206123143434525,25.80x

@@ -1,0 +1,7 @@
+{
+  "System": "MagneticYukawa_chaotic",
+  "Regime": "chaotic",
+  "Continuous_Thm1_Err": 13.24010044336319,
+  "Discrete_Thm3_Err": 64.19686079025269,
+  "Combo13_SepGen_Err": 5.818662792444229
+}

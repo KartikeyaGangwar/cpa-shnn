@@ -1,0 +1,7 @@
+{
+  "System": "VariableMassMagneticBinary_NonAutonomous",
+  "Regime": "chaotic",
+  "Continuous_Thm1_plus_2_Err": 45.43453752994537,
+  "Discrete_Combo23_Err": 272.54955768585205,
+  "Discrete_Combo123_Err": 47.10321128368378
+}

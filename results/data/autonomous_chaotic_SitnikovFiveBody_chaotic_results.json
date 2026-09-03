@@ -1,0 +1,14 @@
+{
+  "errors": {
+    "1_Standard_PINN_MLP": 53.000468015670776,
+    "2_Vanilla_HNN_2019": 29.144200682640076,
+    "3_CPA_SHNN_Core": 33.47228765487671,
+    "4_Theorem1_Separable": 33.565205335617065
+  },
+  "energy_drifts": {
+    "1_Standard_PINN_MLP": 100.0,
+    "2_Vanilla_HNN_2019": 7.054654105331792e-06,
+    "3_CPA_SHNN_Core": 2.464465751472744e-05,
+    "4_Theorem1_Separable": 1.620940963675821e-05
+  }
+}

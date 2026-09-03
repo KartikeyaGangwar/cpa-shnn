@@ -11,13 +11,13 @@
 
 Chaotic multi-body celestial gravitational systems are non-integrable Hamiltonian dynamical systems characterized by positive maximal Lyapunov exponents ($\lambda_{\max} > 0$), high hypersensitivity to initial conditions, and strict symplectic phase space invariants (preserving the canonical 2-form $\omega = \mathrm{d}\mathbf{q} \wedge \mathrm{d}\mathbf{p}$). 
 
-Standard numerical integrators (e.g., Runge-Kutta 4th Order) suffer from severe step-size dispersion and energy drift over secular time horizons ($T \gg \tau_L$). Conversely, conventional Physics-Informed Neural Networks (PINNs) and naive Hamiltonian Neural Networks (HNNs) violate temporal causality by minimizing global space-time collocation loss simultaneously across the entire horizon, resulting in catastrophic Lyapunov error compounding and trajectory divergence.
+Standard numerical integrators suffer from severe step-size dispersion and energy drift over secular time horizons ($T \gg \tau_L$). Conversely, conventional Physics-Informed Neural Networks (PINNs) and naive Hamiltonian Neural Networks (HNNs) violate temporal causality by minimizing global space-time collocation loss simultaneously across the entire horizon, resulting in catastrophic Lyapunov error compounding and trajectory divergence.
 
 **CPA-SHNN** (Causality-Preserving Adaptive Symplectic Hamiltonian Neural Network) resolves these limitations through a clean, bipartite geometric architecture:
 * **Adaptive Causal Time-Marching:** A curriculum-based temporal windowing engine $[0, \tau_1] \to [0, \tau_2] \to \dots \to [0, T_{\max}]$ that strictly enforces initial-value causality;
 * **Theorem 1 (Separable Symplectic Kinetic-Coriolis Decomposition):** Exact analytic momentum velocity equations (reducing the neural search space from 4D to 2D and eliminating autograd momentum noise);
 * **Theorem 2 (Arnold Extended Contact Phase Space):** Energy-preserving contact coordinates $\mathbf{Z}_{\text{ext}} = (\mathbf{q}, t, \mathbf{p}, p_t)$ for non-autonomous breathing and variable-mass dynamics;
-* **Multi-Scale Fourier Encodings:** Overcoming spectral bias on sharp multi-body gravitational saddle potentials (up to $126.40\times$ error reduction);
+* **Multi-Scale Fourier Encodings:** Overcoming spectral bias on sharp multi-body gravitational saddle potentials (up to **$126.40\times$** error reduction);
 * **Second-Order Curvature Optimization:** Dual-phase AdamW exploration followed by aggressive L-BFGS refinement with Strong-Wolfe line search.
 
 ---
@@ -30,7 +30,7 @@ Standard numerical integrators (e.g., Runge-Kutta 4th Order) suffer from severe 
 | **Binary Quasar (Chaotic)** | 23.66% | 149.62% | **11.23%** 👑 | **16.17%** |
 | **Restricted 6-Body (Chaotic)** | 42.27% | 33.70% | **10.07%** 👑 | 39.99% |
 | **Sitnikov 5-Body (Chaotic)** | 53.00% | 29.14% | **33.47%** | 33.57% |
-| **Magnetic Yukawa (Chaotic)** | 1.61% | 129.29% | **9.44%** | **4.13%** 👑 |
+| **Magnetic Yukawa (Chaotic)** | 1.61% | 129.29% | 9.44% | **4.13%** 👑 |
 | **Mean Energy Drift ($\Delta\mathcal{H}$)** | **100.00%** ❌ | **0.0003%** ✅ | **0.0001%** ✅ | **0.0001%** ✅ |
 
 ---
@@ -47,10 +47,10 @@ Standard numerical integrators (e.g., Runge-Kutta 4th Order) suffer from severe 
 | Celestial System | Without Fourier | **With Fourier** | Improvement Factor |
 |---|---|---|---|
 | **Binary Quasar (Chaotic)** | 80.60% | **53.97%** | **1.49x Gain** |
-| **Restricted 6-Body (Chaotic)** | 218.03% | **11.39%** | **19.15x Gain!** 🔥 |
-| **Magnetic Yukawa (Chaotic)** | 74.61% | **0.59%** | **126.40x Gain!** 🔥🔥🔥 |
-| **Elliptic Sitnikov 5-Body** | 100.00% | **4.16%** | **24.03x Gain!** 🔥 |
-| **Variable-Mass Binary (Non-Auto)** | 103.73% | **4.02%** | **25.80x Gain!** 🔥 |
+| **Restricted 6-Body (Chaotic)** | 218.03% | **11.39%** | **19.15x Gain!** 🚀 |
+| **Magnetic Yukawa (Chaotic)** | 74.61% | **0.59%** | **126.40x Gain!** 🔥👑 |
+| **Elliptic Sitnikov (Non-Auto)** | 100.00% | **4.16%** | **24.03x Gain!** 🚀 |
+| **Variable-Mass Binary (Non-Auto)** | 103.73% | **4.02%** | **25.80x Gain!** 🚀 |
 
 ---
 

@@ -1,0 +1,7 @@
+{
+  "System": "EllipticSitnikov_NonAutonomous",
+  "Regime": "chaotic",
+  "Continuous_Thm1_plus_2_Err": 23.545686900615692,
+  "Discrete_Combo23_Err": 91.5464460849762,
+  "Discrete_Combo123_Err": 57.95684456825256
+}

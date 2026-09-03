@@ -1,0 +1,7 @@
+{
+  "System": "RestrictedSixBody_chaotic",
+  "Regime": "chaotic",
+  "Continuous_Thm1_Err": 6.475687026977539,
+  "Discrete_Thm3_Err": 80.32751083374023,
+  "Combo13_SepGen_Err": 3.1638864427804947
+}

@@ -1,0 +1,6 @@
+System,Regime,Continuous_Thm1_Err,Discrete_Thm3_Err,Combo13_SepGen_Err,Continuous_Thm1_plus_2_Err,Discrete_Combo23_Err,Discrete_Combo123_Err
+BinaryQuasar_chaotic,chaotic,11.562947928905487,134.06189680099487,23.1388121843338,,,
+RestrictedSixBody_chaotic,chaotic,6.475687026977539,80.32751083374023,3.1638864427804947,,,
+MagneticYukawa_chaotic,chaotic,13.24010044336319,64.19686079025269,5.818662792444229,,,
+EllipticSitnikov_NonAutonomous,chaotic,,,,23.545686900615692,91.5464460849762,57.95684456825256
+VariableMassMagneticBinary_NonAutonomous,chaotic,,,,45.43453752994537,272.54955768585205,47.10321128368378
