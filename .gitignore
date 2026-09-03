@@ -47,3 +47,13 @@ desktop.ini
 # Track official manuscript
 !manuscript/
 !manuscript/*.tex
+
+# Private Academic Manuscripts & Local Papers (Strictly Local)
+manuscript/
+proposed_idea/
+*.pdf
+*.tex
+*.aux
+*.log
+*.out
+*.synctex.gz
