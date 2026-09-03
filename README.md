@@ -1,4 +1,4 @@
-# CPA-SHNN: Causality-Preserving Adaptive Symplectic Hamiltonian Neural Networks
+# CPA-SHNN: Unified Geometric Deep Learning Framework for Chaotic Multi-Body Celestial Dynamics
 
 ### Academic Research Dissertation Framework
 * **Author:** Kartikey Singh (B.Sc. Honours Mathematics, 4th Year)
