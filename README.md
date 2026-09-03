@@ -53,18 +53,6 @@ Standard numerical integrators (e.g., Runge-Kutta 4th Order) suffer from severe 
 
 ---
 
-### 2.4 Integrator Engine Ablation Matrix: Standard RK4 vs High-Order JVP Taylor Jet
-| Celestial System | CPA-SHNN + **Standard RK4** | CPA-SHNN + **JVP Taylor Jet (8th)** | RK4 Runtime | JVP Jet (8th) Runtime |
-|---|---|---|---|---|
-| **Binary Quasar** | **6.64%** | **6.55%** | **12.4s** ⚡ | 46.9s (3.8x slower) |
-| **Restricted 6-Body** | **6.99%** | **7.00%** | **12.5s** ⚡ | 46.7s (3.7x slower) |
-| **Magnetic Yukawa** | **6.77%** | **6.79%** | **12.4s** ⚡ | 48.0s (3.9x slower) |
-| **Elliptic Sitnikov** | **6.68%** | **6.53%** | **14.2s** ⚡ | 53.2s (3.7x slower) |
-
-> **Pareto Efficiency Insight:** Pushing integrator order from 4th (RK4) to 8th (Taylor Jet) yields negligible trajectory difference ($\Delta < 0.09\%$) while incurring a $3.8	imes$ runtime penalty, proving that the neural parameterization of the potential manifold, rather than integrator discretization order, governs overall physical fidelity.
-
----
-
 ## 3. Execution Instructions
 
 ### 3.1 Autonomous Master Benchmark Execution
@@ -84,9 +72,6 @@ python -m celestial_hnn.benchmarks.run_fourier_ablation_benchmark
 
 # 2. Poincaré Generating Map Ablation
 python -m celestial_hnn.benchmarks.run_generating_function_ablation_benchmark
-
-# 3. Integrator Engine Ablation
-python -m celestial_hnn.benchmarks.run_integrator_ablation_benchmark
 ```
 
 ---
