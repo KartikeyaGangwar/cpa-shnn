@@ -1,4 +1,13 @@
-# CPA-SHNN: Unified Geometric Deep Learning Framework for Chaotic Multi-Body Celestial Dynamics
+# CPA-SHNN: Causality-Preserving Adaptive Symplectic Hamiltonian Neural Networks
+
+[![GitHub Repo](https://img.shields.io/badge/GitHub-cpa--shnn-blue.svg?logo=github)](https://github.com/KartikeyaGangwar/cpa-shnn)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg?logo=python)](https://www.python.org/)
+[![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg?logo=pytorch)](https://pytorch.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![ORCID](https://img.shields.io/badge/ORCID-0009--0009--1973--7532-green.svg)](https://orcid.org/0009-0009-1973-7532)
+
+> **Official Repository:** [https://github.com/KartikeyaGangwar/cpa-shnn](https://github.com/KartikeyaGangwar/cpa-shnn)
+
 
 ### Academic Research Dissertation Framework
 * **Author:** Kartikey Singh (B.Sc. Honours Mathematics, 4th Year)
