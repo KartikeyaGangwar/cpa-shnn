@@ -1,7 +1,7 @@
 # CPA-SHNN: Causality-Preserving Adaptive Symplectic Hamiltonian Neural Networks
 
 ### Academic Research Dissertation Framework
-* **Author:** Kartikeya Gangwar (B.Sc. Honours Mathematics, 4th Year)
+* **Author:** Kartikey Singh (B.Sc. Honours Mathematics, 4th Year)
 * **Supervisor:** Prof. Vinay Kumar (Professor of Mathematics, Zakir Husain Delhi College, University of Delhi)
 * **Domain:** Celestial Mechanics, Geometric Deep Learning, Scientific Machine Learning (SciML), Symplectic Topology
 
