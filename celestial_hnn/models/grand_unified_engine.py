@@ -1,32 +1,57 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from typing import Tuple, Optional
 
 class GrandUnifiedSymplecticEngine(nn.Module):
     """
-    Combo 1+2+3: Grand Unified Celestial Symplectic Engine (Clean Smooth MLP, No Fourier).
+    Combo 1+2+3: Grand Unified Celestial Symplectic Engine with Fourier embeddings.
     """
-    def __init__(self, spatial_dim: int = 2, n_coriolis: float = 1.0, hidden_dim: int = 256, layers: int = 4):
+    def __init__(
+        self,
+        spatial_dim: int = 2,
+        n_coriolis: float = 1.0,
+        hidden_dim: int = 256,
+        layers: int = 4,
+        use_fourier: bool = True,
+        num_fourier: int = 16,
+        fourier_scale: float = 0.5
+    ):
         super().__init__()
         self.spatial_dim = spatial_dim
         self.ext_dim = spatial_dim + 1 # (q, t)
         self.state_dim = 2 * self.ext_dim
         self.n_coriolis = n_coriolis
+        self.use_fourier = use_fourier
         
-        net = [nn.Linear(self.ext_dim, hidden_dim), nn.Tanh()]
+        if use_fourier:
+            B = torch.randn(self.ext_dim, num_fourier) * fourier_scale
+            self.register_buffer("B", B)
+            in_dim = self.ext_dim + 2 * num_fourier
+        else:
+            in_dim = self.ext_dim
+            
+        net = [nn.Linear(in_dim, hidden_dim), nn.Tanh()]
         for _ in range(layers - 2):
             net.extend([nn.Linear(hidden_dim, hidden_dim), nn.Tanh()])
         net.append(nn.Linear(hidden_dim, 1, bias=False))
         self.potential_net = nn.Sequential(*net)
+        
         for m in self.potential_net.modules():
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
+
+    def _embed(self, qt: torch.Tensor) -> torch.Tensor:
+        if self.use_fourier:
+            proj = 2.0 * np.pi * torch.matmul(qt, self.B)
+            return torch.cat([qt, torch.sin(proj), torch.cos(proj)], dim=-1)
+        return qt
 
     def potential(self, q: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         if t.dim() == 1:
             t = t.unsqueeze(-1)
         qt = torch.cat([q, t], dim=-1)
-        return self.potential_net(qt)
+        return self.potential_net(self._embed(qt))
 
     def time_derivative(self, z_ext: torch.Tensor, create_graph: bool = True) -> torch.Tensor:
         q = z_ext[:, :self.spatial_dim]
@@ -43,7 +68,7 @@ class GrandUnifiedSymplecticEngine(nn.Module):
         with torch.enable_grad():
             qt = torch.cat([q, t], dim=-1)
             qt_eval = qt if qt.requires_grad else qt.clone().detach().requires_grad_(True)
-            V = self.potential_net(qt_eval)
+            V = self.potential(qt_eval[:, :self.spatial_dim], qt_eval[:, self.spatial_dim:])
             grad_qt = torch.autograd.grad(V, qt_eval, grad_outputs=torch.ones_like(V), create_graph=create_graph, retain_graph=True)[0]
         grad_q = grad_qt[:, :self.spatial_dim]
         grad_t = grad_qt[:, self.spatial_dim:]
@@ -62,7 +87,7 @@ class GrandUnifiedSymplecticEngine(nn.Module):
                 t_k = t_k.unsqueeze(-1)
             qt = torch.cat([q_k, t_k], dim=-1)
             qt_eval = qt if qt.requires_grad else qt.clone().detach().requires_grad_(True)
-            V = self.potential_net(qt_eval)
+            V = self.potential(qt_eval[:, :self.spatial_dim], qt_eval[:, self.spatial_dim:])
             grad_qt = torch.autograd.grad(V, qt_eval, grad_outputs=torch.ones_like(V), create_graph=False, retain_graph=True)[0]
         grad_q = grad_qt[:, :self.spatial_dim]
         
@@ -91,7 +116,6 @@ class GrandUnifiedSymplecticEngine(nn.Module):
         curr_p = z0_ext[:, self.spatial_dim+1:2*self.spatial_dim+1].clone()
         curr_pt = z0_ext[:, 2*self.spatial_dim+1:].clone()
         dt_vals = t_span[1:] - t_span[:-1]
-        
         for dt in dt_vals:
             dt_val = dt.item()
             curr_q, curr_p, curr_t = self.step(curr_q, curr_p, curr_t, dt=dt_val)

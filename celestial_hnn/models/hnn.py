@@ -1,17 +1,34 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from typing import Optional
 
 class HamiltonianNeuralNetwork(nn.Module):
     """
-    Vanilla Hamiltonian Neural Network (Greydanus et al., 2019) (Clean Smooth MLP, No Fourier).
+    Vanilla Hamiltonian Neural Network (Greydanus et al., 2019) with Fourier embeddings.
     """
-    def __init__(self, spatial_dim: int = 2, hidden_dim: int = 256, layers: int = 4):
+    def __init__(
+        self, 
+        spatial_dim: int = 2, 
+        hidden_dim: int = 256, 
+        layers: int = 4,
+        use_fourier: bool = True,
+        num_fourier: int = 16,
+        fourier_scale: float = 0.5
+    ):
         super().__init__()
         self.spatial_dim = spatial_dim
         self.state_dim = 2 * spatial_dim
+        self.use_fourier = use_fourier
         
-        net = [nn.Linear(self.state_dim, hidden_dim), nn.Tanh()]
+        if use_fourier:
+            B = torch.randn(self.state_dim, num_fourier) * fourier_scale
+            self.register_buffer('B', B)
+            in_dim = self.state_dim + 2 * num_fourier
+        else:
+            in_dim = self.state_dim
+            
+        net = [nn.Linear(in_dim, hidden_dim), nn.Tanh()]
         for _ in range(layers - 2):
             net.extend([nn.Linear(hidden_dim, hidden_dim), nn.Tanh()])
         net.append(nn.Linear(hidden_dim, 1, bias=False))
@@ -21,8 +38,14 @@ class HamiltonianNeuralNetwork(nn.Module):
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
 
+    def _embed(self, z: torch.Tensor) -> torch.Tensor:
+        if self.use_fourier:
+            proj = 2.0 * np.pi * torch.matmul(z, self.B)
+            return torch.cat([z, torch.sin(proj), torch.cos(proj)], dim=-1)
+        return z
+
     def hamiltonian(self, z: torch.Tensor) -> torch.Tensor:
-        return self.h_net(z)
+        return self.h_net(self._embed(z))
 
     def time_derivative(self, z: torch.Tensor, create_graph: bool = True) -> torch.Tensor:
         with torch.enable_grad():

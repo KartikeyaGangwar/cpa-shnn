@@ -130,6 +130,11 @@ python -m celestial_hnn.benchmarks.run_non_autonomous_master_benchmark
 
 ---
 
+### 5.3 Fourier Positional Encoding Ablation Study
+```bash
+python -m celestial_hnn.benchmarks.run_fourier_ablation_benchmark
+```
+
 ## 6. Formal References
 
 * **Arnold, V. I.** (1989). *Mathematical Methods of Classical Mechanics*. Springer-Verlag.

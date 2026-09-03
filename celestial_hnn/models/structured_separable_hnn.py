@@ -5,16 +5,34 @@ from typing import Tuple, Optional
 
 class StructuredSeparableHNN(nn.Module):
     """
-    Theorem 1: Structured Separable Hamiltonian Neural Network (Clean Smooth MLP, No Fourier).
+    Theorem 1: Structured Separable Hamiltonian Neural Network.
     Decomposes: H(q, p) = 1/2 ||p||^2 + n(px*y - py*x) - V_theta(q)
+    Equipped with Fourier positional encodings for multi-scale gravitational potentials.
     """
-    def __init__(self, spatial_dim: int = 2, n_coriolis: float = 1.0, hidden_dim: int = 256, layers: int = 4):
+    def __init__(
+        self, 
+        spatial_dim: int = 2, 
+        n_coriolis: float = 1.0, 
+        hidden_dim: int = 256, 
+        layers: int = 4,
+        use_fourier: bool = True,
+        num_fourier: int = 16,
+        fourier_scale: float = 0.5
+    ):
         super().__init__()
         self.spatial_dim = spatial_dim
         self.state_dim = 2 * spatial_dim
         self.n_coriolis = n_coriolis
+        self.use_fourier = use_fourier
         
-        net = [nn.Linear(spatial_dim, hidden_dim), nn.Tanh()]
+        if use_fourier:
+            B = torch.randn(spatial_dim, num_fourier) * fourier_scale
+            self.register_buffer('B', B)
+            in_dim = spatial_dim + 2 * num_fourier
+        else:
+            in_dim = spatial_dim
+            
+        net = [nn.Linear(in_dim, hidden_dim), nn.Tanh()]
         for _ in range(layers - 2):
             net.extend([nn.Linear(hidden_dim, hidden_dim), nn.Tanh()])
         net.append(nn.Linear(hidden_dim, 1, bias=False))
@@ -24,8 +42,14 @@ class StructuredSeparableHNN(nn.Module):
             if isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
 
+    def _embed(self, q: torch.Tensor) -> torch.Tensor:
+        if self.use_fourier:
+            proj = 2.0 * np.pi * torch.matmul(q, self.B)
+            return torch.cat([q, torch.sin(proj), torch.cos(proj)], dim=-1)
+        return q
+
     def potential(self, q: torch.Tensor) -> torch.Tensor:
-        return self.potential_net(q)
+        return self.potential_net(self._embed(q))
 
     def hamiltonian(self, z: torch.Tensor) -> torch.Tensor:
         q = z[:, :self.spatial_dim]

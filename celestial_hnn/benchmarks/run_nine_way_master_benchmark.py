@@ -121,14 +121,14 @@ def run_nine_way_single_system(
     n_c = getattr(system, "n", 1.0) if system.spatial_dim == 2 else 0.0
     ep_win = max(10, epochs // n_windows)
     
-    # Strictly Autonomous Models (Theorem 1, Theorem 3, Combo 1+3 - No Theorem 2!)
+    # Autonomous Models with Fourier features
     models = {
         "1_Standard_PINN_MLP": BaselineVectorFieldMLP(state_dim=2*system.spatial_dim, hidden_dim=256).to(dev),
-        "2_Vanilla_HNN_2019": HamiltonianNeuralNetwork(spatial_dim=system.spatial_dim, hidden_dim=256).to(dev),
-        "3_CPA_SHNN_Core": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
-        "4_Theorem1_Separable": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
-        "5_Theorem3_GeneratingMap": NeuralSymplecticGeneratingMap(spatial_dim=system.spatial_dim, hidden_dim=256).to(dev),
-        "6_Combo_1_plus_3": SeparableGeneratingMapHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
+        "2_Vanilla_HNN_2019": HamiltonianNeuralNetwork(spatial_dim=system.spatial_dim, hidden_dim=256, use_fourier=True).to(dev),
+        "3_CPA_SHNN_Core": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256, use_fourier=True).to(dev),
+        "4_Theorem1_Separable": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256, use_fourier=True).to(dev),
+        "5_Theorem3_GeneratingMap": NeuralSymplecticGeneratingMap(spatial_dim=system.spatial_dim, hidden_dim=256, use_fourier=True).to(dev),
+        "6_Combo_1_plus_3": SeparableGeneratingMapHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256, use_fourier=True).to(dev),
     }
     
     results = {}
@@ -142,6 +142,7 @@ def run_nine_way_single_system(
         results[name] = res["rel_l2_error"]
         drifts[name] = res["energy_drift"]
         preds[name] = res["z_pred"]
+        print(f"  --> Model [{name}]: Error = {res['rel_l2_error']:.2f}% | Drift = {res['energy_drift']:.4f}%")
         
     # High-Res Publication Grade 3-Panel Figure (300 DPI)
     os.makedirs("results/plots", exist_ok=True)
@@ -189,7 +190,7 @@ def run_nine_way_single_system(
 def run_nine_way_master_suite(
     regime: str = "chaotic", 
     epochs: int = 400, 
-    n_windows: int = 5,
+    n_windows: int = 5, 
     lbfgs_max_iter: int = 50,
     device: Optional[torch.device] = None
 ) -> pd.DataFrame:
@@ -223,7 +224,6 @@ def run_nine_way_master_suite(
         res["Regime"] = regime
         res["Runtime_s"] = f"{el:.1f}s"
         records.append(res)
-        print(f"  [+] Complete in {el:.1f}s | CPA-Core: {res['3_CPA_SHNN_Core']:.2f}% | Thm1 (Sep): {res['4_Theorem1_Separable']:.2f}% | Combo1+3: {res['6_Combo_1_plus_3']:.2f}%")
         
     df = pd.DataFrame(records)
     cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "5_Theorem3_GeneratingMap", "6_Combo_1_plus_3", "Runtime_s"]
