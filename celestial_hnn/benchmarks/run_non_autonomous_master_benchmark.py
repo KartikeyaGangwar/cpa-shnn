@@ -20,24 +20,28 @@ from celestial_hnn.models.extended_generating_hnn import ExtendedGeneratingMapHN
 from celestial_hnn.models.grand_unified_engine import GrandUnifiedSymplecticEngine
 
 def train_non_autonomous_model(
-    model,
-    system,
-    n_windows: int = 4,
-    epochs_per_window: int = 60,
+    model: nn.Module,
+    system: Any,
+    n_windows: int = 5,
+    epochs_per_window: int = 80,
     use_lbfgs: bool = True,
-    lbfgs_max_iter: int = 40
+    lbfgs_max_iter: int = 50
 ) -> Dict[str, Any]:
+    """
+    Trains non-autonomous geometric models using the Causality-Preserving Adaptive (CPA)
+    Time-Marching curriculum, combined with AdamW exploration and aggressive second-order L-BFGS refinement.
+    """
     dev = system.device
     T_max = system.T_max
     window_boundaries = torch.linspace(0, T_max, n_windows + 1, device=dev)
     
     for w in range(n_windows):
         t_curr_end = window_boundaries[w + 1]
-        t_w = torch.linspace(0, t_curr_end, 800 * (w + 1), device=dev)
+        t_w = torch.linspace(0, t_curr_end, 1000 * (w + 1), device=dev)
         z_w = system.ground_truth_trajectory(t_w)
         dz_w = system.canonical_derivatives(z_w)
         
-        is_autonomous_arch = (getattr(model, "state_dim", 2*system.spatial_dim) == 2*system.spatial_dim)
+        is_autonomous_arch = (getattr(model, "state_dim", 2 * system.spatial_dim) == 2 * system.spatial_dim)
         if is_autonomous_arch:
             if system.spatial_dim == 1:
                 zb_train = torch.cat([z_w[:, 0:1], z_w[:, 2:3]], dim=-1)
@@ -50,12 +54,13 @@ def train_non_autonomous_model(
             dzb_train = dz_w
             
         opt_adam = torch.optim.AdamW(model.parameters(), lr=2.5e-3, weight_decay=1e-6)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt_adam, T_max=epochs_per_window, eta_min=1e-5)
         
         for _ in range(epochs_per_window):
             opt_adam.zero_grad()
-            idx = torch.randint(0, len(zb_train), (min(512, len(zb_train)),), device=dev)
+            idx = torch.randint(0, len(zb_train), (min(1024, len(zb_train)),), device=dev)
             zb = zb_train[idx]
-            zt = zb + torch.randn_like(zb) * 0.02
+            zt = zb + torch.randn_like(zb) * 0.025 # Dense off-manifold perturbation
             za = torch.cat([zb, zt], dim=0)
             
             if is_autonomous_arch:
@@ -73,9 +78,18 @@ def train_non_autonomous_model(
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
             opt_adam.step()
+            scheduler.step()
             
         if use_lbfgs:
-            opt_lbfgs = torch.optim.LBFGS(model.parameters(), lr=0.8, max_iter=lbfgs_max_iter, history_size=25, line_search_fn="strong_wolfe")
+            opt_lbfgs = torch.optim.LBFGS(
+                model.parameters(),
+                lr=0.8,
+                max_iter=lbfgs_max_iter,
+                history_size=30,
+                line_search_fn="strong_wolfe",
+                tolerance_grad=1e-7,
+                tolerance_change=1e-9
+            )
             zb_l = zb_train
             dza_l = dzb_train
             def closure():
@@ -91,7 +105,7 @@ def train_non_autonomous_model(
                 
     t_dense = torch.linspace(0, T_max, 2500, device=dev)
     z_gt = system.ground_truth_trajectory(t_dense)
-    is_autonomous_arch = (getattr(model, "state_dim", 2*system.spatial_dim) == 2*system.spatial_dim)
+    is_autonomous_arch = (getattr(model, "state_dim", 2 * system.spatial_dim) == 2 * system.spatial_dim)
     
     if is_autonomous_arch:
         if system.spatial_dim == 1:
@@ -116,14 +130,18 @@ def train_non_autonomous_model(
 
 def run_non_autonomous_master_suite(
     regime: str = "chaotic",
-    epochs: int = 240,
-    n_windows: int = 4,
+    epochs: int = 400,
+    n_windows: int = 5,
+    lbfgs_max_iter: int = 50,
     device: Optional[torch.device] = None
 ) -> pd.DataFrame:
+    """
+    Executes the full 8-way benchmark suite across non-autonomous celestial mechanics problems.
+    """
     dev = device if device is not None else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     print("=" * 125)
     print(f"  NON-AUTONOMOUS CELESTIAL MASTER 8-WAY BENCHMARK SUITE")
-    print(f"  Regime: {regime.upper()} | Epochs: {epochs} | Windows: {n_windows} | Device: {dev}")
+    print(f"  Regime: {regime.upper()} | Epochs: {epochs} | Windows: {n_windows} | L-BFGS Max Iter: {lbfgs_max_iter} | Device: {dev}")
     print("=" * 125)
     
     systems = [
@@ -153,7 +171,9 @@ def run_non_autonomous_master_suite(
         res_dict = {}
         preds_dict = {}
         for name, m in models.items():
-            res = train_non_autonomous_model(m, s, n_windows=n_windows, epochs_per_window=ep_win, use_lbfgs=True, lbfgs_max_iter=30)
+            res = train_non_autonomous_model(
+                m, s, n_windows=n_windows, epochs_per_window=ep_win, use_lbfgs=True, lbfgs_max_iter=lbfgs_max_iter
+            )
             res_dict[name] = res["rel_l2_error"]
             preds_dict[name] = res["z_pred"]
             print(f"  --> Model [{name}]: Error = {res['rel_l2_error']:.2f}%")
@@ -225,6 +245,13 @@ def run_non_autonomous_master_suite(
     df.to_csv(out_csv, index=False)
     print(f"\n[+] Saved Non-Autonomous Master CSV: {out_csv}")
     
+    # Save individual system JSONs
+    for r in records:
+        sys_name = r["System"]
+        json_path = f"results/data/non_autonomous_{regime}_{sys_name}_results.json"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(r, f, indent=2)
+            
     print("\n" + "=" * 145)
     print("                 NON-AUTONOMOUS CELESTIAL FULL 8-WAY BENCHMARK MATRIX")
     print("=" * 145)
@@ -232,3 +259,6 @@ def run_non_autonomous_master_suite(
     print("=" * 145)
     
     return df
+
+if __name__ == "__main__":
+    run_non_autonomous_master_suite(regime="regular", epochs=10)
