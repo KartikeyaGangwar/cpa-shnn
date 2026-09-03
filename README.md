@@ -108,9 +108,6 @@ UG_R_proj/
 │   └── benchmarks/
 │       ├── run_nine_way_master_benchmark.py     # Autonomous 9-Way Master Suite
 │       └── run_non_autonomous_master_benchmark.py # Non-Autonomous 8-Way Master Suite
-├── manuscript/
-│   ├── cpa_shnn_manuscript.tex                  # Formal LaTeX Academic Dissertation
-│   └── cpa_shnn_manuscript.pdf                  # Compiled High-Resolution Manuscript PDF
 ├── results/
 │   ├── data/                                    # Generated CSVs and JSON experiment data
 │   └── plots/                                   # 300 DPI comparative trajectory & phase portrait figures
