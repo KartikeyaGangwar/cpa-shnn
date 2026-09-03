@@ -71,3 +71,7 @@ class HamiltonianNeuralNetwork(nn.Module):
             curr_z = curr_z + (dt_val / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
             traj.append(curr_z.clone())
         return torch.stack(traj, dim=0)
+
+    def integrate_taylor_jet(self, z0: torch.Tensor, t_span: torch.Tensor, order: int = 6) -> torch.Tensor:
+        from celestial_hnn.integrators.taylor_jet import taylor_jet_integrate
+        return taylor_jet_integrate(lambda z: self.time_derivative(z, create_graph=False), z0, t_span, order=order)

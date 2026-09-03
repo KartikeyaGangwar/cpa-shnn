@@ -86,6 +86,11 @@ python -m celestial_hnn.benchmarks.run_fourier_ablation_benchmark
 python -m celestial_hnn.benchmarks.run_generating_function_ablation_benchmark
 ```
 
+#### 4.3.3 Integrator Engine Ablation Suite (Standard RK4 vs JVP Taylor Jet)
+```bash
+python -m celestial_hnn.benchmarks.run_integrator_ablation_benchmark
+```
+
 ## 5. Formal Academic References
 
 * **Arnold, V. I.** (1989). *Mathematical Methods of Classical Mechanics*. Springer-Verlag.
