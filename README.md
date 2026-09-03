@@ -17,7 +17,7 @@ Standard numerical integrators (e.g., Runge-Kutta 4th Order) suffer from severe 
 * **Adaptive Causal Time-Marching:** A curriculum-based temporal windowing engine $[0, \tau_1] \to [0, \tau_2] \to \dots \to [0, T_{\max}]$ that strictly enforces initial-value causality;
 * **Theorem 1 (Separable Symplectic Kinetic-Coriolis Decomposition):** Exact analytic momentum velocity equations (reducing the neural search space from 4D to 2D and eliminating autograd momentum noise);
 * **Theorem 2 (Arnold Extended Contact Phase Space):** Energy-preserving contact coordinates $\mathbf{Z}_{\text{ext}} = (\mathbf{q}, t, \mathbf{p}, p_t)$ for non-autonomous breathing and variable-mass dynamics;
-* **Multi-Scale Fourier Encodings:** Overcoming spectral bias on sharp multi-body gravitational saddle potentials ($15.86\times$ error reduction);
+* **Multi-Scale Fourier Encodings:** Overcoming spectral bias on sharp multi-body gravitational saddle potentials (up to $126.40\times$ error reduction);
 * **Second-Order Curvature Optimization:** Dual-phase AdamW exploration followed by aggressive L-BFGS refinement with Strong-Wolfe line search.
 
 ---
@@ -27,29 +27,30 @@ Standard numerical integrators (e.g., Runge-Kutta 4th Order) suffer from severe 
 ### 2.1 Autonomous Celestial Master Benchmark Matrix
 | System Name | Standard PINN | Vanilla HNN (2019) | CPA-SHNN Core | Theorem 1 (Separable) |
 |---|---|---|---|---|
-| **Binary Quasar (Chaotic)** | 45.32% | 85.83% | 35.68% | **15.06%** 👑 |
-| **Restricted 6-Body (Chaotic)** | 110.79% | 201.84% | **8.35%** 👑 | 23.39% |
-| **Sitnikov 5-Body (Chaotic)** | 53.53% | 26.94% | **33.47%** | 33.52% |
-| **Magnetic Yukawa (Chaotic)** | 5.65% | 98.30% | **0.87%** 👑🔥 | **2.00%** |
-| **Mean Energy Drift ($\Delta\mathcal{H}$)** | **100.00%** ❌ | **0.0002%** ✅ | **0.0001%** ✅ | **0.0001%** ✅ |
+| **Binary Quasar (Chaotic)** | 23.66% | 149.62% | **11.23%** 👑 | **16.17%** |
+| **Restricted 6-Body (Chaotic)** | 42.27% | 33.70% | **10.07%** 👑 | 39.99% |
+| **Sitnikov 5-Body (Chaotic)** | 53.00% | 29.14% | **33.47%** | 33.57% |
+| **Magnetic Yukawa (Chaotic)** | 1.61% | 129.29% | **9.44%** | **4.13%** 👑 |
+| **Mean Energy Drift ($\Delta\mathcal{H}$)** | **100.00%** ❌ | **0.0003%** ✅ | **0.0001%** ✅ | **0.0001%** ✅ |
 
 ---
 
 ### 2.2 Non-Autonomous Master Benchmark Matrix (Prof. Vinay Kumar Systems)
 | Non-Autonomous System | Standard PINN | Vanilla HNN | CPA-Core | **Thm 2 (Extended)** | **Thm 1+2 (Sep-Ext)** |
 |---|---|---|---|---|---|
-| **Elliptic Sitnikov 5-Body** *(Ullah 2020)* | 4.16% | 105.87% | 102.96% | **20.28%** 👑 | 69.46% |
-| **Variable-Mass Binary** *(Kumar 2023)* | 2.44% | 110.10% | 37.25% | 847.52% | **5.11%** 👑🔥 |
+| **Elliptic Sitnikov 5-Body** *(Ullah 2020)* | 1.21% | 75.74% | 102.95% | 34.29% | **12.78%** 👑 |
+| **Variable-Mass Binary** *(Kumar 2023)* | 3.62% | 135.29% | 165.07% | 308.89% | **30.51%** 👑 |
 
 ---
 
 ### 2.3 Fourier Positional Encoding Ablation Matrix (Spectral Bias Proof)
 | Celestial System | Without Fourier | **With Fourier** | Improvement Factor |
 |---|---|---|---|
-| **Binary Quasar (Chaotic)** | 105.60% | **17.91%** | **5.90x Gain** 🚀 |
-| **Restricted 6-Body (Chaotic)** | 67.32% | **43.28%** | **1.56x Gain** |
-| **Magnetic Yukawa (Chaotic)** | 11.86% | **4.75%** | **2.50x Gain** |
-| **Variable-Mass Binary (Non-Auto)** | 100.90% | **6.36%** | **15.86x Gain!** 🔥 |
+| **Binary Quasar (Chaotic)** | 80.60% | **53.97%** | **1.49x Gain** |
+| **Restricted 6-Body (Chaotic)** | 218.03% | **11.39%** | **19.15x Gain!** 🔥 |
+| **Magnetic Yukawa (Chaotic)** | 74.61% | **0.59%** | **126.40x Gain!** 🔥🔥🔥 |
+| **Elliptic Sitnikov 5-Body** | 100.00% | **4.16%** | **24.03x Gain!** 🔥 |
+| **Variable-Mass Binary (Non-Auto)** | 103.73% | **4.02%** | **25.80x Gain!** 🔥 |
 
 ---
 
