@@ -12,10 +12,10 @@ from celestial_hnn.physics.elliptic_sitnikov import EllipticSitnikovFiveBodySyst
 from celestial_hnn.physics.variable_mass_magnetic_binary import VariableMassMagneticBinarySystem
 
 from celestial_hnn.models.baseline_mlp import BaselineVectorFieldMLP
-from celestial_hnn.models.hnn import HamiltonianNeuralNetwork
-from celestial_hnn.models.structured_separable_hnn import StructuredSeparableHNN
 from celestial_hnn.models.extended_phase_space_hnn import ExtendedPhaseSpaceHNN
 from celestial_hnn.models.separable_extended_hnn import SeparableExtendedContactHNN
+from celestial_hnn.models.extended_generating_hnn import ExtendedGeneratingMapHNN
+from celestial_hnn.models.grand_unified_engine import GrandUnifiedSymplecticEngine
 
 def train_non_autonomous_model(
     model,
@@ -78,10 +78,10 @@ def run_non_autonomous_master_suite(
     device: Optional[torch.device] = None
 ) -> pd.DataFrame:
     dev = device if device is not None else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    print("=" * 110)
-    print(f"  NON-AUTONOMOUS CELESTIAL BENCHMARK SUITE (PROF. VINAY KUMAR SYSTEMS)")
+    print("=" * 115)
+    print(f"  NON-AUTONOMOUS CELESTIAL BENCHMARK SUITE (SMOOTH NON-FOURIER ARCHITECTURES)")
     print(f"  Regime: {regime.upper()} | Epochs: {epochs} | Windows: {n_windows} | Device: {dev}")
-    print("=" * 110)
+    print("=" * 115)
     
     systems = [
         EllipticSitnikovFiveBodySystem(regime=regime, device=dev),
@@ -99,7 +99,9 @@ def run_non_autonomous_master_suite(
         models = {
             "1_Standard_PINN_MLP": BaselineVectorFieldMLP(state_dim=s.state_dim, hidden_dim=256).to(dev),
             "2_Theorem2_ExtendedContactHNN": ExtendedPhaseSpaceHNN(spatial_dim=s.spatial_dim, hidden_dim=256).to(dev),
-            "3_Theorem1_plus_2_SeparableExtendedHNN": SeparableExtendedContactHNN(spatial_dim=s.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev)
+            "3_Theorem1_plus_2_SeparableExtendedHNN": SeparableExtendedContactHNN(spatial_dim=s.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
+            "4_Combo_2_plus_3_ExtendedGeneratingMap": ExtendedGeneratingMapHNN(spatial_dim=s.spatial_dim, hidden_dim=256).to(dev),
+            "5_Combo_1_2_3_GrandUnifiedSymplecticEngine": GrandUnifiedSymplecticEngine(spatial_dim=s.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
         }
         
         res_dict = {}
@@ -121,43 +123,41 @@ def run_non_autonomous_master_suite(
         t_dense = torch.linspace(0, s.T_max, 2500, device=dev)
         z_gt = s.ground_truth_trajectory(t_dense).detach().cpu().numpy()
         
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5.5), dpi=300)
+        fig, axes = plt.subplots(1, 2, figsize=(15, 5.5), dpi=300)
         
         if s.spatial_dim == 1:
-            # Sitnikov vertical oscillation z(t)
             t_np = t_dense.detach().cpu().numpy()
             axes[0].plot(t_np, z_gt[:, 0], 'k-', lw=2.5, label='Ground Truth')
             axes[0].plot(t_np, preds_dict["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], 'r--', lw=1.5, label=f'Standard MLP ({res_dict["1_Standard_PINN_MLP"]:.1f}%)')
-            axes[0].plot(t_np, preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], 'b-', lw=1.8, label=f'Separable Extended HNN ({res_dict["3_Theorem1_plus_2_SeparableExtendedHNN"]:.2f}%)')
+            axes[0].plot(t_np, preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], 'b-', lw=1.8, label=f'Separable Extended ({res_dict["3_Theorem1_plus_2_SeparableExtendedHNN"]:.2f}%)')
+            axes[0].plot(t_np, preds_dict["5_Combo_1_2_3_GrandUnifiedSymplecticEngine"].detach().cpu().numpy()[:, 0], 'm:', lw=1.5, label=f'Grand Unified ({res_dict["5_Combo_1_2_3_GrandUnifiedSymplecticEngine"]:.2f}%)')
             axes[0].set_xlabel("Time t", fontweight='bold')
             axes[0].set_ylabel("Vertical Position z(t)", fontweight='bold')
             axes[0].set_title(f"A: Non-Autonomous Sitnikov Oscillation\n({s.name})", fontsize=11, fontweight='bold')
             axes[0].grid(True, linestyle=':', alpha=0.6)
             axes[0].legend(loc='best')
             
-            # Phase portrait (z, pz)
             axes[1].plot(z_gt[:, 0], z_gt[:, 2], 'k-', lw=2.5, label='Ground Truth')
             axes[1].plot(preds_dict["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], preds_dict["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 2], 'r--', lw=1.5, label='MLP')
-            axes[1].plot(preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 2], 'b-', lw=1.8, label='Separable Extended HNN')
+            axes[1].plot(preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 2], 'b-', lw=1.8, label='Separable Extended')
             axes[1].set_xlabel("z", fontweight='bold')
             axes[1].set_ylabel("pz", fontweight='bold')
             axes[1].set_title("B: Non-Autonomous Phase Portrait (z, pz)", fontsize=11, fontweight='bold')
             axes[1].grid(True, linestyle=':', alpha=0.6)
             axes[1].legend(loc='best')
         else:
-            # Variable Mass (x, y) plane
             axes[0].plot(z_gt[:, 0], z_gt[:, 1], 'k-', lw=2.5, label='Ground Truth')
             axes[0].plot(preds_dict["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], preds_dict["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 1], 'r--', lw=1.5, label=f'Standard MLP ({res_dict["1_Standard_PINN_MLP"]:.1f}%)')
-            axes[0].plot(preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 1], 'b-', lw=1.8, label=f'Separable Extended HNN ({res_dict["3_Theorem1_plus_2_SeparableExtendedHNN"]:.2f}%)')
+            axes[0].plot(preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 1], 'b-', lw=1.8, label=f'Separable Extended ({res_dict["3_Theorem1_plus_2_SeparableExtendedHNN"]:.2f}%)')
+            axes[0].plot(preds_dict["5_Combo_1_2_3_GrandUnifiedSymplecticEngine"].detach().cpu().numpy()[:, 0], preds_dict["5_Combo_1_2_3_GrandUnifiedSymplecticEngine"].detach().cpu().numpy()[:, 1], 'm:', lw=1.5, label=f'Grand Unified ({res_dict["5_Combo_1_2_3_GrandUnifiedSymplecticEngine"]:.2f}%)')
             axes[0].set_xlabel("x", fontweight='bold')
             axes[0].set_ylabel("y", fontweight='bold')
             axes[0].set_title(f"A: Variable-Mass Trajectory (x, y)\n({s.name})", fontsize=11, fontweight='bold')
             axes[0].grid(True, linestyle=':', alpha=0.6)
             axes[0].legend(loc='best')
             
-            # (x, px) Phase Portrait
             axes[1].plot(z_gt[:, 0], z_gt[:, 3], 'k-', lw=2.5, label='Ground Truth')
-            axes[1].plot(preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 3], 'b-', lw=1.8, label='Separable Extended HNN')
+            axes[1].plot(preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 0], preds_dict["3_Theorem1_plus_2_SeparableExtendedHNN"].detach().cpu().numpy()[:, 3], 'b-', lw=1.8, label='Separable Extended')
             axes[1].set_xlabel("x", fontweight='bold')
             axes[1].set_ylabel("px", fontweight='bold')
             axes[1].set_title("B: Contact Phase Portrait (x, px)", fontsize=11, fontweight='bold')
@@ -170,7 +170,7 @@ def run_non_autonomous_master_suite(
         plt.close()
         
     df = pd.DataFrame(records)
-    cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Theorem2_ExtendedContactHNN", "3_Theorem1_plus_2_SeparableExtendedHNN", "Runtime_s"]
+    cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Theorem2_ExtendedContactHNN", "3_Theorem1_plus_2_SeparableExtendedHNN", "4_Combo_2_plus_3_ExtendedGeneratingMap", "5_Combo_1_2_3_GrandUnifiedSymplecticEngine", "Runtime_s"]
     df = df[cols]
     
     os.makedirs("results/data", exist_ok=True)
@@ -178,13 +178,10 @@ def run_non_autonomous_master_suite(
     df.to_csv(out_csv, index=False)
     print(f"\n[+] Saved Non-Autonomous Master CSV: {out_csv}")
     
-    print("\n" + "=" * 110)
+    print("\n" + "=" * 125)
     print("                 NON-AUTONOMOUS CELESTIAL BENCHMARK MATRIX")
-    print("=" * 110)
+    print("=" * 125)
     print(df.to_string(index=False))
-    print("=" * 110)
+    print("=" * 125)
     
     return df
-
-if __name__ == "__main__":
-    run_non_autonomous_master_suite(regime="regular", epochs=10)

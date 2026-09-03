@@ -5,27 +5,15 @@ from typing import Tuple, Optional
 
 class SeparableExtendedContactHNN(nn.Module):
     """
-    The Ultimate Non-Autonomous Geometric Architecture:
-    Unification of:
-      - Theorem 1: Separable Symplectic Kinetic-Coriolis Decomposition (p, px*y - py*x)
-      - Theorem 2: Arnold's Extended Contact Phase Space (q, t, p, pt)
-      
-    Extended Canonical Hamiltonian:
-      K_theta(q, t, p, pt) = 1/2 ||p||^2 + n(px*y - py*x) + V_theta(q, t) + pt = 0
-      
-    Exact Contact Symplectic Equations:
-      dq/dt = p + n * (y, -x)       (Analytically exact)
-      dt/dt = 1.0                   (Arnold's unit clock)
-      dp/dt = n * (py, -px) - grad_q V_theta(q, t)
-      dpt/dt = -∂V_theta/∂t         (Energy exchange rate)
+    Non-Autonomous Geometric Architecture (Clean Smooth MLP, No Fourier):
+    Unifies Theorem 1 (Separable Kinetic-Coriolis) + Theorem 2 (Arnold Contact Space).
     """
     def __init__(
         self,
         spatial_dim: int = 2,
         n_coriolis: float = 1.0,
         hidden_dim: int = 256,
-        layers: int = 4,
-        num_fourier: int = 16
+        layers: int = 4
     ):
         super().__init__()
         self.spatial_dim = spatial_dim
@@ -33,26 +21,23 @@ class SeparableExtendedContactHNN(nn.Module):
         self.state_dim = 2 * self.ext_spatial_dim # (q, t, p, pt)
         self.n_coriolis = n_coriolis
         
-        # Fourier positional encoding for spatial-temporal manifold (q, t)
-        B = torch.randn(self.ext_spatial_dim, num_fourier) * 0.5
-        self.register_buffer("B", B)
-        in_dim = self.ext_spatial_dim + 2 * num_fourier
-        
-        net = [nn.Linear(in_dim, hidden_dim), nn.Tanh()]
+        # Clean smooth multi-layer perceptron (No high-frequency Fourier multiplier)
+        net = [nn.Linear(self.ext_spatial_dim, hidden_dim), nn.Tanh()]
         for _ in range(layers - 2):
             net.extend([nn.Linear(hidden_dim, hidden_dim), nn.Tanh()])
         net.append(nn.Linear(hidden_dim, 1, bias=False))
         self.potential_net = nn.Sequential(*net)
-
-    def _fourier_embed(self, qt: torch.Tensor) -> torch.Tensor:
-        proj = 2.0 * np.pi * torch.matmul(qt, self.B)
-        return torch.cat([qt, torch.sin(proj), torch.cos(proj)], dim=-1)
+        
+        # Xavier initialization for smooth gradients
+        for m in self.potential_net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
 
     def potential(self, q: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         if t.dim() == 1:
             t = t.unsqueeze(-1)
         qt = torch.cat([q, t], dim=-1)
-        return self.potential_net(self._fourier_embed(qt))
+        return self.potential_net(qt)
 
     def extended_hamiltonian(self, z_ext: torch.Tensor) -> torch.Tensor:
         q = z_ext[:, :self.spatial_dim]
@@ -80,14 +65,14 @@ class SeparableExtendedContactHNN(nn.Module):
         else:
             dq_dt = p
             
-        # 2. dt/dt = 1.0
+        # 2. dt/dt = 1.0 (Exact Arnold Clock)
         dt_dt = torch.ones_like(t)
         
-        # 3. Autograd for spatial and temporal gradients of V_theta(q, t)
+        # 3. Autograd on smooth potential V_theta(q, t)
         with torch.enable_grad():
             qt = torch.cat([q, t], dim=-1)
             qt_eval = qt if qt.requires_grad else qt.clone().detach().requires_grad_(True)
-            V = self.potential_net(self._fourier_embed(qt_eval))
+            V = self.potential_net(qt_eval)
             grad_qt = torch.autograd.grad(V, qt_eval, grad_outputs=torch.ones_like(V), create_graph=create_graph, retain_graph=True)[0]
             
         grad_q = grad_qt[:, :self.spatial_dim]
