@@ -75,6 +75,17 @@ python -m celestial_hnn.benchmarks.run_non_autonomous_master_benchmark
 
 ---
 
+### 4.3 Dedicated Ablation Studies
+#### 4.3.1 Fourier Positional Encoding Ablation Suite
+```bash
+python -m celestial_hnn.benchmarks.run_fourier_ablation_benchmark
+```
+
+#### 4.3.2 Poincaré Generating Function vs Continuous Vector Field Ablation Suite
+```bash
+python -m celestial_hnn.benchmarks.run_generating_function_ablation_benchmark
+```
+
 ## 5. Formal Academic References
 
 * **Arnold, V. I.** (1989). *Mathematical Methods of Classical Mechanics*. Springer-Verlag.
