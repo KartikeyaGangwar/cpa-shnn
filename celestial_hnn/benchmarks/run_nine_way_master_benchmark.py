@@ -16,8 +16,6 @@ from celestial_hnn.physics.magnetic_binary_yukawa import MagneticYukawaHamiltoni
 from celestial_hnn.models.baseline_mlp import BaselineVectorFieldMLP
 from celestial_hnn.models.hnn import HamiltonianNeuralNetwork
 from celestial_hnn.models.structured_separable_hnn import StructuredSeparableHNN
-from celestial_hnn.models.generating_function_hnn import NeuralSymplecticGeneratingMap
-from celestial_hnn.models.separable_generating_hnn import SeparableGeneratingMapHNN
 
 def train_model_with_cpa_time_marching(
     model: nn.Module, 
@@ -111,7 +109,7 @@ def train_model_with_cpa_time_marching(
 def run_nine_way_single_system(
     system, 
     epochs: int = 400, 
-    n_windows: int = 5,
+    n_windows: int = 5, 
     lbfgs_max_iter: int = 50,
     device: Optional[torch.device] = None
 ) -> Dict[str, Any]:
@@ -121,14 +119,12 @@ def run_nine_way_single_system(
     n_c = getattr(system, "n", 1.0) if system.spatial_dim == 2 else 0.0
     ep_win = max(10, epochs // n_windows)
     
-    # Autonomous Models with Fourier features
+    # 4 Pure Autonomous Models (Theorem 1 as Champion)
     models = {
         "1_Standard_PINN_MLP": BaselineVectorFieldMLP(state_dim=2*system.spatial_dim, hidden_dim=256).to(dev),
         "2_Vanilla_HNN_2019": HamiltonianNeuralNetwork(spatial_dim=system.spatial_dim, hidden_dim=256, use_fourier=True).to(dev),
         "3_CPA_SHNN_Core": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256, use_fourier=True).to(dev),
         "4_Theorem1_Separable": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256, use_fourier=True).to(dev),
-        "5_Theorem3_GeneratingMap": NeuralSymplecticGeneratingMap(spatial_dim=system.spatial_dim, hidden_dim=256, use_fourier=True).to(dev),
-        "6_Combo_1_plus_3": SeparableGeneratingMapHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256, use_fourier=True).to(dev),
     }
     
     results = {}
@@ -144,34 +140,30 @@ def run_nine_way_single_system(
         preds[name] = res["z_pred"]
         print(f"  --> Model [{name}]: Error = {res['rel_l2_error']:.2f}% | Drift = {res['energy_drift']:.4f}%")
         
-    # High-Res Publication Grade 3-Panel Figure (300 DPI)
+    # High-Res 2-Panel Trajectory Plot (300 DPI)
     os.makedirs("results/plots", exist_ok=True)
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5.5), dpi=300)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5), dpi=300)
     gt_np = z_orb.detach().cpu().numpy()
     
-    # Panel 1: Baselines
+    # Panel 1: Trajectory Comparison
     axes[0].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
-    axes[0].plot(preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 1], 'r--', lw=1.5, label=f'Standard MLP ({results["1_Standard_PINN_MLP"]:.1f}%)')
-    axes[0].plot(preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 0], preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 1], 'g:', lw=1.5, label=f'Vanilla HNN ({results["2_Vanilla_HNN_2019"]:.1f}%)')
-    axes[0].set_title(f"A: Baseline Paradigms\n{system.name}", fontsize=11, fontweight='bold')
+    axes[0].plot(preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 1], 'r--', lw=1.2, label=f'Standard PINN ({results["1_Standard_PINN_MLP"]:.1f}%)')
+    axes[0].plot(preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 0], preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 1], 'gray', linestyle=':', lw=1.2, label=f'Vanilla HNN ({results["2_Vanilla_HNN_2019"]:.1f}%)')
+    axes[0].plot(preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 0], preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 1], 'b-', lw=2.0, label=f'Theorem 1 Separable ({results["4_Theorem1_Separable"]:.2f}%)')
+    axes[0].set_title(f"A: Trajectory Configuration\n{system.name}", fontsize=11, fontweight='bold')
+    axes[0].set_xlabel("x", fontweight='bold')
+    axes[0].set_ylabel("y", fontweight='bold')
     axes[0].grid(True, linestyle=':', alpha=0.6)
     axes[0].legend(loc='best', fontsize=8)
     
-    # Panel 2: Theorem 1 (Separable) vs Theorem 3 (Generating Map)
-    axes[1].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
-    axes[1].plot(preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 0], preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 1], 'b-', lw=1.8, label=f'Thm 1: Separable ({results["4_Theorem1_Separable"]:.2f}%)')
-    axes[1].plot(preds["5_Theorem3_GeneratingMap"].detach().cpu().numpy()[:, 0], preds["5_Theorem3_GeneratingMap"].detach().cpu().numpy()[:, 1], 'c:', lw=1.5, label=f'Thm 3: Generating ({results["5_Theorem3_GeneratingMap"]:.1f}%)')
-    axes[1].set_title(f"B: Theoretical Foundations (Theorems 1 & 3)\n{system.name}", fontsize=11, fontweight='bold')
+    # Panel 2: Phase Space (x, px)
+    axes[1].plot(gt_np[:, 0], gt_np[:, system.spatial_dim], 'k-', lw=2.5, label='Ground Truth')
+    axes[1].plot(preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 0], preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, system.spatial_dim], 'b-', lw=2.0, label=f'Theorem 1 (Drift={drifts["4_Theorem1_Separable"]:.4f}%)')
+    axes[1].set_title(f"B: Phase Space (x, px)\n{system.name}", fontsize=11, fontweight='bold')
+    axes[1].set_xlabel("x", fontweight='bold')
+    axes[1].set_ylabel("px", fontweight='bold')
     axes[1].grid(True, linestyle=':', alpha=0.6)
     axes[1].legend(loc='best', fontsize=8)
-    
-    # Panel 3: Proposed Core vs Combo 1+3
-    axes[2].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
-    axes[2].plot(preds["3_CPA_SHNN_Core"].detach().cpu().numpy()[:, 0], preds["3_CPA_SHNN_Core"].detach().cpu().numpy()[:, 1], 'green', lw=2.0, label=f'CPA-SHNN Core ({results["3_CPA_SHNN_Core"]:.2f}%)')
-    axes[2].plot(preds["6_Combo_1_plus_3"].detach().cpu().numpy()[:, 0], preds["6_Combo_1_plus_3"].detach().cpu().numpy()[:, 1], 'orange', linestyle='--', lw=1.8, label=f'Combo 1+3: Sep-Gen ({results["6_Combo_1_plus_3"]:.2f}%)')
-    axes[2].set_title(f"C: Flagship Proposed Solutions\n{system.name}", fontsize=11, fontweight='bold')
-    axes[2].grid(True, linestyle=':', alpha=0.6)
-    axes[2].legend(loc='best', fontsize=8)
     
     plt.tight_layout()
     plot_path = f"results/plots/autonomous_comparison_{getattr(system, 'regime', 'reg')}_{system.name}.png"
@@ -194,13 +186,6 @@ def run_nine_way_master_suite(
     lbfgs_max_iter: int = 50,
     device: Optional[torch.device] = None
 ) -> pd.DataFrame:
-    """
-    Autonomous Celestial Master Benchmark Suite across 4 canonical systems:
-    1. Binary Quasar System
-    2. Restricted Six-Body System
-    3. Sitnikov Five-Body System (Autonomous)
-    4. Magnetic Binary Yukawa System
-    """
     dev = device if device is not None else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
     print("=" * 115)
     print(f"  AUTONOMOUS CELESTIAL MASTER BENCHMARK SUITE (4 CANONICAL SYSTEMS)")
@@ -226,40 +211,18 @@ def run_nine_way_master_suite(
         records.append(res)
         
     df = pd.DataFrame(records)
-    cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "5_Theorem3_GeneratingMap", "6_Combo_1_plus_3", "Runtime_s"]
+    cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "Runtime_s"]
     df = df[cols]
     
     out_csv = f"results/data/autonomous_master_benchmarks_{regime}.csv"
     df.to_csv(out_csv, index=False)
     print(f"\n[+] Saved Autonomous Master CSV: {out_csv}")
     
-    # Master Summary Bar Chart
-    plt.figure(figsize=(14, 6), dpi=300)
-    models_keys = ["1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "6_Combo_1_plus_3"]
-    labels = ["Standard PINN", "Vanilla HNN", "CPA-SHNN Core", "Thm 1 (Separable)", "Combo 1+3 (Sep-Gen)"]
-    
-    x = np.arange(len(systems))
-    width = 0.15
-    for i, (k, l) in enumerate(zip(models_keys, labels)):
-        vals = [df.loc[df["System"] == s.name, k].values[0] for s in systems]
-        plt.bar(x + i*width, vals, width, label=l)
-        
-    plt.xticks(x + width*2, [s.name for s in systems], fontsize=9, fontweight='bold')
-    plt.ylabel("Trajectory Relative L2 Error (%)", fontsize=11, fontweight='bold')
-    plt.title(f"Autonomous Paradigm Master Benchmark ({regime.upper()})", fontsize=13, fontweight='bold')
-    plt.yscale("log")
-    plt.grid(True, linestyle=':', alpha=0.6, which="both")
-    plt.legend(loc='upper right', fontsize=9)
-    plt.tight_layout()
-    plt.savefig(f"results/plots/autonomous_master_summary_{regime}.png")
-    plt.close()
-    
-    print("\n" + "=" * 125)
+    print("\n" + "=" * 115)
     print("                 AUTONOMOUS CELESTIAL MASTER BENCHMARK MATRIX")
-    print("=" * 125)
+    print("=" * 115)
     print(df.to_string(index=False))
-    print("=" * 125)
-    
+    print("=" * 115)
     return df
 
 if __name__ == "__main__":
