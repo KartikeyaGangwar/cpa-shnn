@@ -1,0 +1,3 @@
+System,Regime,1_Standard_PINN_MLP,2_Theorem2_ExtendedContactHNN,3_Theorem1_plus_2_SeparableExtendedHNN,Runtime_s
+EllipticSitnikov_NonAutonomous,chaotic,81.16745948791504,574.1527080535889,166.06745719909668,210.4s
+VariableMassMagneticBinary_NonAutonomous,chaotic,84.5750629901886,473.7173557281494,203.80311012268066,210.7s

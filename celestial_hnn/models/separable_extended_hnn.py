@@ -3,21 +3,26 @@ import torch.nn as nn
 import numpy as np
 from typing import Tuple, Optional
 
-class ExtendedPhaseSpaceHNN(nn.Module):
+class SeparableExtendedContactHNN(nn.Module):
     """
-    Theorem 2: Arnold's Extended Contact Phase Space Hamiltonian Neural Network.
-    State in extended space: Z_ext = (q, t, p, pt) in R^{2(d+1)}.
-    Hamiltonian constraint: K_theta(q, t, p, pt) = 1/2 ||p||^2 + V_theta(q, t) + pt = 0.
-    
-    Contact Symplectic Equations:
-      dq/dt = p
-      dt/dt = 1.0 (Arnold Unit Clock)
-      dp/dt = -grad_q V_theta(q, t)
-      dpt/dt = -∂V_theta/∂t (Power exchange rate)
+    The Ultimate Non-Autonomous Geometric Architecture:
+    Unification of:
+      - Theorem 1: Separable Symplectic Kinetic-Coriolis Decomposition (p, px*y - py*x)
+      - Theorem 2: Arnold's Extended Contact Phase Space (q, t, p, pt)
+      
+    Extended Canonical Hamiltonian:
+      K_theta(q, t, p, pt) = 1/2 ||p||^2 + n(px*y - py*x) + V_theta(q, t) + pt = 0
+      
+    Exact Contact Symplectic Equations:
+      dq/dt = p + n * (y, -x)       (Analytically exact)
+      dt/dt = 1.0                   (Arnold's unit clock)
+      dp/dt = n * (py, -px) - grad_q V_theta(q, t)
+      dpt/dt = -∂V_theta/∂t         (Energy exchange rate)
     """
     def __init__(
         self,
-        spatial_dim: int = 1,
+        spatial_dim: int = 2,
+        n_coriolis: float = 1.0,
         hidden_dim: int = 256,
         layers: int = 4,
         num_fourier: int = 16
@@ -26,7 +31,9 @@ class ExtendedPhaseSpaceHNN(nn.Module):
         self.spatial_dim = spatial_dim
         self.ext_spatial_dim = spatial_dim + 1 # (q, t)
         self.state_dim = 2 * self.ext_spatial_dim # (q, t, p, pt)
+        self.n_coriolis = n_coriolis
         
+        # Fourier positional encoding for spatial-temporal manifold (q, t)
         B = torch.randn(self.ext_spatial_dim, num_fourier) * 0.5
         self.register_buffer("B", B)
         in_dim = self.ext_spatial_dim + 2 * num_fourier
@@ -52,9 +59,14 @@ class ExtendedPhaseSpaceHNN(nn.Module):
         t = z_ext[:, self.spatial_dim:self.spatial_dim+1]
         p = z_ext[:, self.spatial_dim+1:2*self.spatial_dim+1]
         pt = z_ext[:, 2*self.spatial_dim+1:]
+        
         kinetic = 0.5 * torch.sum(p ** 2, dim=-1, keepdim=True)
+        if self.spatial_dim == 2 and self.n_coriolis != 0.0:
+            coriolis = self.n_coriolis * (p[:, 0:1] * q[:, 1:2] - p[:, 1:2] * q[:, 0:1])
+        else:
+            coriolis = 0.0
         V = self.potential(q, t)
-        return kinetic + V + pt
+        return kinetic + coriolis + V + pt
 
     def time_derivative(self, z_ext: torch.Tensor, create_graph: bool = True) -> torch.Tensor:
         q = z_ext[:, :self.spatial_dim]
@@ -62,9 +74,16 @@ class ExtendedPhaseSpaceHNN(nn.Module):
         p = z_ext[:, self.spatial_dim+1:2*self.spatial_dim+1]
         pt = z_ext[:, 2*self.spatial_dim+1:]
         
-        dq_dt = p
+        # 1. dq/dt
+        if self.spatial_dim == 2 and self.n_coriolis != 0.0:
+            dq_dt = torch.cat([p[:, 0:1] + self.n_coriolis * q[:, 1:2], p[:, 1:2] - self.n_coriolis * q[:, 0:1]], dim=-1)
+        else:
+            dq_dt = p
+            
+        # 2. dt/dt = 1.0
         dt_dt = torch.ones_like(t)
         
+        # 3. Autograd for spatial and temporal gradients of V_theta(q, t)
         with torch.enable_grad():
             qt = torch.cat([q, t], dim=-1)
             qt_eval = qt if qt.requires_grad else qt.clone().detach().requires_grad_(True)
@@ -74,7 +93,14 @@ class ExtendedPhaseSpaceHNN(nn.Module):
         grad_q = grad_qt[:, :self.spatial_dim]
         grad_t = grad_qt[:, self.spatial_dim:]
         
-        dp_dt = -grad_q
+        # 4. dp/dt
+        if self.spatial_dim == 2 and self.n_coriolis != 0.0:
+            coriolis_force = torch.cat([self.n_coriolis * p[:, 1:2], -self.n_coriolis * p[:, 0:1]], dim=-1)
+            dp_dt = coriolis_force - grad_q
+        else:
+            dp_dt = -grad_q
+            
+        # 5. dpt/dt = -∂V/∂t
         dpt_dt = -grad_t
         
         return torch.cat([dq_dt, dt_dt, dp_dt, dpt_dt], dim=-1)

@@ -6,6 +6,7 @@ from celestial_hnn.models.generating_function_hnn import NeuralSymplecticGenerat
 from celestial_hnn.models.separable_generating_hnn import SeparableGeneratingMapHNN
 from celestial_hnn.models.extended_generating_hnn import ExtendedGeneratingMapHNN
 from celestial_hnn.models.grand_unified_engine import GrandUnifiedSymplecticEngine
+from celestial_hnn.models.separable_extended_hnn import SeparableExtendedContactHNN
 
 __all__ = [
     "BaselineVectorFieldMLP",
@@ -16,4 +17,5 @@ __all__ = [
     "SeparableGeneratingMapHNN",
     "ExtendedGeneratingMapHNN",
     "GrandUnifiedSymplecticEngine",
+    "SeparableExtendedContactHNN",
 ]
