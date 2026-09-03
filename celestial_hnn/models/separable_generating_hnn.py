@@ -1,41 +1,29 @@
 import torch
 import torch.nn as nn
-import numpy as np
 from typing import Tuple, Optional
 
 class SeparableGeneratingMapHNN(nn.Module):
     """
-    Combo 1+3: Separable Neural Symplectic Generating Map.
-    Combines Theorem 1 (Analytic Kinetic-Coriolis Separation) + Theorem 3 (Poincaré Generating Function).
-    
-    Formula:
-      S_theta(q_k, p_{k+1}) = q_k . p_{k+1} + Delta_t * [ 1/2 ||p_{k+1}||^2 + n(px_{k+1}*y_k - py_{k+1}*x_k) - V_theta(q_k) ]
-      
-    Exact Symplectic Update:
-      p_k = p_{k+1} + Delta_t * [ n * (py_{k+1}, -px_{k+1}) - grad_q V_theta(q_k) ]
-      q_{k+1} = q_k + Delta_t * [ p_{k+1} + n * (y_k, -x_k) ]
+    Combo 1+3: Separable Neural Symplectic Generating Map (Clean Smooth MLP, No Fourier).
     """
-    def __init__(self, spatial_dim: int = 2, n_coriolis: float = 1.0, hidden_dim: int = 256, layers: int = 4, num_fourier: int = 16):
+    def __init__(self, spatial_dim: int = 2, n_coriolis: float = 1.0, hidden_dim: int = 256, layers: int = 4):
         super().__init__()
         self.spatial_dim = spatial_dim
         self.state_dim = 2 * spatial_dim
         self.n_coriolis = n_coriolis
         
-        B = torch.randn(spatial_dim, num_fourier) * 0.5
-        self.register_buffer("B", B)
-        in_dim = spatial_dim + 2 * num_fourier
-        net = [nn.Linear(in_dim, hidden_dim), nn.Tanh()]
+        net = [nn.Linear(spatial_dim, hidden_dim), nn.Tanh()]
         for _ in range(layers - 2):
             net.extend([nn.Linear(hidden_dim, hidden_dim), nn.Tanh()])
         net.append(nn.Linear(hidden_dim, 1, bias=False))
         self.potential_net = nn.Sequential(*net)
-
-    def _fourier_embed(self, q: torch.Tensor) -> torch.Tensor:
-        proj = 2.0 * np.pi * torch.matmul(q, self.B)
-        return torch.cat([q, torch.sin(proj), torch.cos(proj)], dim=-1)
+        
+        for m in self.potential_net.modules():
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
 
     def potential(self, q: torch.Tensor) -> torch.Tensor:
-        return self.potential_net(self._fourier_embed(q))
+        return self.potential_net(q)
 
     def hamiltonian(self, z: torch.Tensor) -> torch.Tensor:
         q = z[:, :self.spatial_dim]

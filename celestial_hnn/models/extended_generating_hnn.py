@@ -1,16 +1,16 @@
 import torch
 import torch.nn as nn
-import numpy as np
 from typing import Tuple, Optional
 
 class ExtendedGeneratingMapHNN(nn.Module):
     """
-    Combo 2+3: Extended Space Neural Symplectic Generating Map (Clean Smooth MLP).
+    Combo 2+3: Extended Space Neural Symplectic Generating Map (Clean Smooth MLP, No Fourier).
     """
     def __init__(self, spatial_dim: int = 1, hidden_dim: int = 256, layers: int = 4):
         super().__init__()
         self.spatial_dim = spatial_dim
         self.ext_dim = spatial_dim + 1
+        self.state_dim = 2 * self.ext_dim
         
         net = [nn.Linear(self.ext_dim, hidden_dim), nn.Tanh()]
         for _ in range(layers - 2):
