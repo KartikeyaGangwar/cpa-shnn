@@ -16,21 +16,22 @@ from celestial_hnn.physics.magnetic_binary_yukawa import MagneticYukawaHamiltoni
 from celestial_hnn.models.baseline_mlp import BaselineVectorFieldMLP
 from celestial_hnn.models.hnn import HamiltonianNeuralNetwork
 from celestial_hnn.models.structured_separable_hnn import StructuredSeparableHNN
-from celestial_hnn.models.extended_phase_space_hnn import ExtendedPhaseSpaceHNN
 from celestial_hnn.models.generating_function_hnn import NeuralSymplecticGeneratingMap
 from celestial_hnn.models.separable_generating_hnn import SeparableGeneratingMapHNN
-from celestial_hnn.models.extended_generating_hnn import ExtendedGeneratingMapHNN
-from celestial_hnn.models.grand_unified_engine import GrandUnifiedSymplecticEngine
 
 def train_model_with_cpa_time_marching(
-    model, 
-    system, 
+    model: nn.Module, 
+    system: Any, 
     n_windows: int = 5, 
     epochs_per_window: int = 80, 
     use_lbfgs: bool = True, 
     lbfgs_max_iter: int = 50,
     verbose: bool = False
 ) -> Dict[str, Any]:
+    """
+    Autonomous CPA Time-Marching Engine:
+    Curriculum causal windows + AdamW (Cosine Annealing) + Aggressive L-BFGS (Strong-Wolfe).
+    """
     dev = system.device
     T_max = system.T_max
     window_boundaries = torch.linspace(0, T_max, n_windows + 1, device=dev)
@@ -42,7 +43,6 @@ def train_model_with_cpa_time_marching(
         dz_w = system.canonical_derivatives(z_w)
         H_w = system.exact_hamiltonian(z_w)
         
-        # 1. High-Precision AdamW Phase
         opt_adam = torch.optim.AdamW(model.parameters(), lr=2.5e-3, weight_decay=1e-6)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt_adam, T_max=epochs_per_window, eta_min=1e-5)
         
@@ -50,7 +50,7 @@ def train_model_with_cpa_time_marching(
             opt_adam.zero_grad()
             idx = torch.randint(0, len(z_w), (min(1024, len(z_w)),), device=dev)
             zb = z_w[idx]
-            zt = zb + torch.randn_like(zb) * 0.025  # Dense off-manifold collocation
+            zt = zb + torch.randn_like(zb) * 0.025 # Dense off-manifold collocation
             za = torch.cat([zb, zt], dim=0)
             dza = torch.cat([dz_w[idx], system.canonical_derivatives(zt)], dim=0)
             
@@ -67,7 +67,6 @@ def train_model_with_cpa_time_marching(
             opt_adam.step()
             scheduler.step()
             
-        # 2. Aggressive Second-Order L-BFGS Curvature Refinement
         if use_lbfgs:
             opt_lbfgs = torch.optim.LBFGS(
                 model.parameters(), 
@@ -122,16 +121,14 @@ def run_nine_way_single_system(
     n_c = getattr(system, "n", 1.0) if system.spatial_dim == 2 else 0.0
     ep_win = max(10, epochs // n_windows)
     
+    # Strictly Autonomous Models (Theorem 1, Theorem 3, Combo 1+3 - No Theorem 2!)
     models = {
         "1_Standard_PINN_MLP": BaselineVectorFieldMLP(state_dim=2*system.spatial_dim, hidden_dim=256).to(dev),
         "2_Vanilla_HNN_2019": HamiltonianNeuralNetwork(spatial_dim=system.spatial_dim, hidden_dim=256).to(dev),
         "3_CPA_SHNN_Core": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
         "4_Theorem1_Separable": StructuredSeparableHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
-        "5_Theorem2_ExtendedSpace": ExtendedPhaseSpaceHNN(spatial_dim=system.spatial_dim, hidden_dim=256).to(dev),
-        "6_Theorem3_GeneratingMap": NeuralSymplecticGeneratingMap(spatial_dim=system.spatial_dim, hidden_dim=256).to(dev),
-        "7_Combo_1_plus_3": SeparableGeneratingMapHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
-        "8_Combo_2_plus_3": ExtendedGeneratingMapHNN(spatial_dim=system.spatial_dim, hidden_dim=256).to(dev),
-        "9_Combo_1_2_3_Unified": GrandUnifiedSymplecticEngine(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
+        "5_Theorem3_GeneratingMap": NeuralSymplecticGeneratingMap(spatial_dim=system.spatial_dim, hidden_dim=256).to(dev),
+        "6_Combo_1_plus_3": SeparableGeneratingMapHNN(spatial_dim=system.spatial_dim, n_coriolis=n_c, hidden_dim=256).to(dev),
     }
     
     results = {}
@@ -155,36 +152,34 @@ def run_nine_way_single_system(
     axes[0].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
     axes[0].plot(preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 1], 'r--', lw=1.5, label=f'Standard MLP ({results["1_Standard_PINN_MLP"]:.1f}%)')
     axes[0].plot(preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 0], preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 1], 'g:', lw=1.5, label=f'Vanilla HNN ({results["2_Vanilla_HNN_2019"]:.1f}%)')
-    axes[0].set_title(f"A: Baseline Baselines\n{system.name}", fontsize=11, fontweight='bold')
+    axes[0].set_title(f"A: Baseline Paradigms\n{system.name}", fontsize=11, fontweight='bold')
     axes[0].grid(True, linestyle=':', alpha=0.6)
     axes[0].legend(loc='best', fontsize=8)
     
-    # Panel 2: The Core Theorems
+    # Panel 2: Theorem 1 (Separable) vs Theorem 3 (Generating Map)
     axes[1].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
     axes[1].plot(preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 0], preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 1], 'b-', lw=1.8, label=f'Thm 1: Separable ({results["4_Theorem1_Separable"]:.2f}%)')
-    axes[1].plot(preds["5_Theorem2_ExtendedSpace"].detach().cpu().numpy()[:, 0], preds["5_Theorem2_ExtendedSpace"].detach().cpu().numpy()[:, 1], 'm--', lw=1.2, label=f'Thm 2: Extended ({results["5_Theorem2_ExtendedSpace"]:.1f}%)')
-    axes[1].plot(preds["6_Theorem3_GeneratingMap"].detach().cpu().numpy()[:, 0], preds["6_Theorem3_GeneratingMap"].detach().cpu().numpy()[:, 1], 'c:', lw=1.2, label=f'Thm 3: Generating ({results["6_Theorem3_GeneratingMap"]:.1f}%)')
-    axes[1].set_title(f"B: Theoretical Foundations\n(Theorems 1, 2, 3)", fontsize=11, fontweight='bold')
+    axes[1].plot(preds["5_Theorem3_GeneratingMap"].detach().cpu().numpy()[:, 0], preds["5_Theorem3_GeneratingMap"].detach().cpu().numpy()[:, 1], 'c:', lw=1.5, label=f'Thm 3: Generating ({results["5_Theorem3_GeneratingMap"]:.1f}%)')
+    axes[1].set_title(f"B: Theoretical Foundations (Theorems 1 & 3)\n{system.name}", fontsize=11, fontweight='bold')
     axes[1].grid(True, linestyle=':', alpha=0.6)
     axes[1].legend(loc='best', fontsize=8)
     
-    # Panel 3: Unified Combos vs CPA-SHNN Core
+    # Panel 3: Proposed Core vs Combo 1+3
     axes[2].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
     axes[2].plot(preds["3_CPA_SHNN_Core"].detach().cpu().numpy()[:, 0], preds["3_CPA_SHNN_Core"].detach().cpu().numpy()[:, 1], 'green', lw=2.0, label=f'CPA-SHNN Core ({results["3_CPA_SHNN_Core"]:.2f}%)')
-    axes[2].plot(preds["7_Combo_1_plus_3"].detach().cpu().numpy()[:, 0], preds["7_Combo_1_plus_3"].detach().cpu().numpy()[:, 1], 'orange', linestyle='--', lw=1.5, label=f'Combo 1+3 ({results["7_Combo_1_plus_3"]:.2f}%)')
-    axes[2].plot(preds["9_Combo_1_2_3_Unified"].detach().cpu().numpy()[:, 0], preds["9_Combo_1_2_3_Unified"].detach().cpu().numpy()[:, 1], 'red', linestyle=':', lw=1.5, label=f'Grand Unified ({results["9_Combo_1_2_3_Unified"]:.2f}%)')
-    axes[2].set_title(f"C: Unified Synthesis & Combos\n(CPA-SHNN & Combos)", fontsize=11, fontweight='bold')
+    axes[2].plot(preds["6_Combo_1_plus_3"].detach().cpu().numpy()[:, 0], preds["6_Combo_1_plus_3"].detach().cpu().numpy()[:, 1], 'orange', linestyle='--', lw=1.8, label=f'Combo 1+3: Sep-Gen ({results["6_Combo_1_plus_3"]:.2f}%)')
+    axes[2].set_title(f"C: Flagship Proposed Solutions\n{system.name}", fontsize=11, fontweight='bold')
     axes[2].grid(True, linestyle=':', alpha=0.6)
     axes[2].legend(loc='best', fontsize=8)
     
     plt.tight_layout()
-    plot_path = f"results/plots/nine_way_comparison_{getattr(system, 'regime', 'reg')}_{system.name}.png"
+    plot_path = f"results/plots/autonomous_comparison_{getattr(system, 'regime', 'reg')}_{system.name}.png"
     plt.savefig(plot_path)
     plt.close()
     
     # Save Full System JSON
     os.makedirs("results/data", exist_ok=True)
-    json_path = f"results/data/nine_way_{getattr(system, 'regime', 'reg')}_{system.name}_results.json"
+    json_path = f"results/data/autonomous_{getattr(system, 'regime', 'reg')}_{system.name}_results.json"
     full_export = {"errors": results, "energy_drifts": drifts}
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(full_export, f, indent=2)
@@ -198,11 +193,18 @@ def run_nine_way_master_suite(
     lbfgs_max_iter: int = 50,
     device: Optional[torch.device] = None
 ) -> pd.DataFrame:
+    """
+    Autonomous Celestial Master Benchmark Suite across 4 canonical systems:
+    1. Binary Quasar System
+    2. Restricted Six-Body System
+    3. Sitnikov Five-Body System (Autonomous)
+    4. Magnetic Binary Yukawa System
+    """
     dev = device if device is not None else (torch.device("cuda" if torch.cuda.is_available() else "cpu"))
-    print("=" * 105)
-    print(f"  NINE-WAY GRAND SCIENTIFIC BENCHMARK MASTER SUITE (KAGGLE GPU ENGINE)")
+    print("=" * 115)
+    print(f"  AUTONOMOUS CELESTIAL MASTER BENCHMARK SUITE (4 CANONICAL SYSTEMS)")
     print(f"  Regime: {regime.upper()} | Total Epochs: {epochs} | Windows: {n_windows} | L-BFGS Max Iter: {lbfgs_max_iter} | Device: {dev}")
-    print("=" * 105)
+    print("=" * 115)
     
     systems = [
         BinaryQuasarHamiltonianSystem(regime=regime, device=dev),
@@ -213,7 +215,7 @@ def run_nine_way_master_suite(
     
     records = []
     for s in systems:
-        print(f"\n>>> Benchmarking 9 Paradigms on System: {s.name} ({regime.upper()}) <<<")
+        print(f"\n>>> Benchmarking Autonomous System: {s.name} ({regime.upper()}) <<<")
         t0 = time.time()
         res = run_nine_way_single_system(s, epochs=epochs, n_windows=n_windows, lbfgs_max_iter=lbfgs_max_iter, device=dev)
         el = time.time() - t0
@@ -221,39 +223,39 @@ def run_nine_way_master_suite(
         res["Regime"] = regime
         res["Runtime_s"] = f"{el:.1f}s"
         records.append(res)
-        print(f"  [+] Complete in {el:.1f}s | CPA-Core: {res['3_CPA_SHNN_Core']:.2f}% | Thm1 (Sep): {res['4_Theorem1_Separable']:.2f}% | Combo1+3: {res['7_Combo_1_plus_3']:.2f}% | Unified: {res['9_Combo_1_2_3_Unified']:.2f}%")
+        print(f"  [+] Complete in {el:.1f}s | CPA-Core: {res['3_CPA_SHNN_Core']:.2f}% | Thm1 (Sep): {res['4_Theorem1_Separable']:.2f}% | Combo1+3: {res['6_Combo_1_plus_3']:.2f}%")
         
     df = pd.DataFrame(records)
-    cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "5_Theorem2_ExtendedSpace", "6_Theorem3_GeneratingMap", "7_Combo_1_plus_3", "8_Combo_2_plus_3", "9_Combo_1_2_3_Unified", "Runtime_s"]
+    cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "5_Theorem3_GeneratingMap", "6_Combo_1_plus_3", "Runtime_s"]
     df = df[cols]
     
-    out_csv = f"results/data/nine_way_master_benchmarks_{regime}.csv"
+    out_csv = f"results/data/autonomous_master_benchmarks_{regime}.csv"
     df.to_csv(out_csv, index=False)
-    print(f"\n[+] Saved 9-Way Master CSV: {out_csv}")
+    print(f"\n[+] Saved Autonomous Master CSV: {out_csv}")
     
     # Master Summary Bar Chart
-    plt.figure(figsize=(15, 6), dpi=300)
-    models_keys = ["1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "7_Combo_1_plus_3", "9_Combo_1_2_3_Unified"]
-    labels = ["Standard PINN", "Vanilla HNN", "CPA-SHNN Core", "Thm 1 (Separable)", "Combo 1+3 (Sep-Gen)", "Grand Unified Engine"]
+    plt.figure(figsize=(14, 6), dpi=300)
+    models_keys = ["1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable", "6_Combo_1_plus_3"]
+    labels = ["Standard PINN", "Vanilla HNN", "CPA-SHNN Core", "Thm 1 (Separable)", "Combo 1+3 (Sep-Gen)"]
     
     x = np.arange(len(systems))
-    width = 0.13
+    width = 0.15
     for i, (k, l) in enumerate(zip(models_keys, labels)):
         vals = [df.loc[df["System"] == s.name, k].values[0] for s in systems]
         plt.bar(x + i*width, vals, width, label=l)
         
-    plt.xticks(x + width*2.5, [s.name for s in systems], fontsize=9)
+    plt.xticks(x + width*2, [s.name for s in systems], fontsize=9, fontweight='bold')
     plt.ylabel("Trajectory Relative L2 Error (%)", fontsize=11, fontweight='bold')
-    plt.title(f"9-Way Architectural Paradigm Master Benchmark ({regime.upper()})", fontsize=13, fontweight='bold')
+    plt.title(f"Autonomous Paradigm Master Benchmark ({regime.upper()})", fontsize=13, fontweight='bold')
     plt.yscale("log")
     plt.grid(True, linestyle=':', alpha=0.6, which="both")
     plt.legend(loc='upper right', fontsize=9)
     plt.tight_layout()
-    plt.savefig(f"results/plots/nine_way_master_summary_{regime}.png")
+    plt.savefig(f"results/plots/autonomous_master_summary_{regime}.png")
     plt.close()
     
     print("\n" + "=" * 125)
-    print("                      NINE-WAY GRAND SCIENTIFIC BENCHMARK MATRIX")
+    print("                 AUTONOMOUS CELESTIAL MASTER BENCHMARK MATRIX")
     print("=" * 125)
     print(df.to_string(index=False))
     print("=" * 125)
