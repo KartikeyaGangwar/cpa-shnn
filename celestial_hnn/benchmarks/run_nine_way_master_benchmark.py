@@ -48,7 +48,7 @@ def train_model_with_cpa_time_marching(
             opt_adam.zero_grad()
             idx = torch.randint(0, len(z_w), (min(1024, len(z_w)),), device=dev)
             zb = z_w[idx]
-            zt = zb + torch.randn_like(zb) * 0.025 # Dense off-manifold collocation
+            zt = zb + torch.randn_like(zb) * 0.025 # Dense off-manifold perturbation
             za = torch.cat([zb, zt], dim=0)
             dza = torch.cat([dz_w[idx], system.canonical_derivatives(zt)], dim=0)
             
@@ -119,7 +119,7 @@ def run_nine_way_single_system(
     n_c = getattr(system, "n", 1.0) if system.spatial_dim == 2 else 0.0
     ep_win = max(10, epochs // n_windows)
     
-    # 4 Pure Autonomous Models (Theorem 1 as Champion)
+    # 4 Pure Autonomous Models (Zero Theorem 3)
     models = {
         "1_Standard_PINN_MLP": BaselineVectorFieldMLP(state_dim=2*system.spatial_dim, hidden_dim=256).to(dev),
         "2_Vanilla_HNN_2019": HamiltonianNeuralNetwork(spatial_dim=system.spatial_dim, hidden_dim=256, use_fourier=True).to(dev),
@@ -140,34 +140,35 @@ def run_nine_way_single_system(
         preds[name] = res["z_pred"]
         print(f"  --> Model [{name}]: Error = {res['rel_l2_error']:.2f}% | Drift = {res['energy_drift']:.4f}%")
         
-    # High-Res 2-Panel Trajectory Plot (300 DPI)
+    # High-Res 4-Panel Independent Overlay Figure (300 DPI) - ZERO OVERLAPPING!
     os.makedirs("results/plots", exist_ok=True)
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5), dpi=300)
+    fig, axes = plt.subplots(1, 4, figsize=(22, 5.0), dpi=300)
     gt_np = z_orb.detach().cpu().numpy()
     
-    # Panel 1: Trajectory Comparison
-    axes[0].plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.5, label='Ground Truth')
-    axes[0].plot(preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 0], preds["1_Standard_PINN_MLP"].detach().cpu().numpy()[:, 1], 'r--', lw=1.2, label=f'Standard PINN ({results["1_Standard_PINN_MLP"]:.1f}%)')
-    axes[0].plot(preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 0], preds["2_Vanilla_HNN_2019"].detach().cpu().numpy()[:, 1], 'gray', linestyle=':', lw=1.2, label=f'Vanilla HNN ({results["2_Vanilla_HNN_2019"]:.1f}%)')
-    axes[0].plot(preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 0], preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 1], 'b-', lw=2.0, label=f'Theorem 1 Separable ({results["4_Theorem1_Separable"]:.2f}%)')
-    axes[0].set_title(f"A: Trajectory Configuration\n{system.name}", fontsize=11, fontweight='bold')
-    axes[0].set_xlabel("x", fontweight='bold')
-    axes[0].set_ylabel("y", fontweight='bold')
-    axes[0].grid(True, linestyle=':', alpha=0.6)
-    axes[0].legend(loc='best', fontsize=8)
+    panel_configs = [
+        ("1_Standard_PINN_MLP", "Standard PINN (MLP)", "r--", axes[0]),
+        ("2_Vanilla_HNN_2019", "Vanilla HNN (2019)", "darkorange", axes[1]),
+        ("3_CPA_SHNN_Core", "CPA-SHNN Core", "purple", axes[2]),
+        ("4_Theorem1_Separable", "Theorem 1: Separable HNN (Champion)", "b-", axes[3]),
+    ]
     
-    # Panel 2: Phase Space (x, px)
-    axes[1].plot(gt_np[:, 0], gt_np[:, system.spatial_dim], 'k-', lw=2.5, label='Ground Truth')
-    axes[1].plot(preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, 0], preds["4_Theorem1_Separable"].detach().cpu().numpy()[:, system.spatial_dim], 'b-', lw=2.0, label=f'Theorem 1 (Drift={drifts["4_Theorem1_Separable"]:.4f}%)')
-    axes[1].set_title(f"B: Phase Space (x, px)\n{system.name}", fontsize=11, fontweight='bold')
-    axes[1].set_xlabel("x", fontweight='bold')
-    axes[1].set_ylabel("px", fontweight='bold')
-    axes[1].grid(True, linestyle=':', alpha=0.6)
-    axes[1].legend(loc='best', fontsize=8)
-    
+    for key, title, style, ax in panel_configs:
+        pred_np = preds[key].detach().cpu().numpy()
+        ax.plot(gt_np[:, 0], gt_np[:, 1], 'k-', lw=2.4, label='Ground Truth')
+        if '--' in style:
+            ax.plot(pred_np[:, 0], pred_np[:, 1], style, lw=1.6, label=f'Prediction (Err: {results[key]:.2f}%)')
+        else:
+            ax.plot(pred_np[:, 0], pred_np[:, 1], color=style.replace('-', ''), linestyle='-' if '-' in style else ':', lw=1.8, label=f'Prediction (Err: {results[key]:.2f}%)')
+        ax.set_title(f"{title}\nErr: {results[key]:.2f}% | Drift: {drifts[key]:.4f}%", fontsize=10, fontweight='bold')
+        ax.set_xlabel("x", fontweight='bold')
+        ax.set_ylabel("y", fontweight='bold')
+        ax.grid(True, linestyle=':', alpha=0.6)
+        ax.legend(loc='best', fontsize=8)
+        
+    plt.suptitle(f"Autonomous Benchmark Trajectory Decomposition: {system.name} ({getattr(system, 'regime', 'chaotic').upper()})", fontsize=13, fontweight='bold', y=1.03)
     plt.tight_layout()
     plot_path = f"results/plots/autonomous_comparison_{getattr(system, 'regime', 'reg')}_{system.name}.png"
-    plt.savefig(plot_path)
+    plt.savefig(plot_path, bbox_inches='tight')
     plt.close()
     
     # Save Full System JSON
@@ -217,6 +218,28 @@ def run_nine_way_master_suite(
     out_csv = f"results/data/autonomous_master_benchmarks_{regime}.csv"
     df.to_csv(out_csv, index=False)
     print(f"\n[+] Saved Autonomous Master CSV: {out_csv}")
+    
+    # Master Summary Bar Chart
+    plt.figure(figsize=(12, 5.5), dpi=300)
+    models_keys = ["1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem1_Separable"]
+    labels = ["Standard PINN", "Vanilla HNN", "CPA-SHNN Core", "Thm 1: Separable (Champion)"]
+    colors = ["#e74c3c", "#f39c12", "#9b59b6", "#2980b9"]
+    
+    x = np.arange(len(systems))
+    width = 0.18
+    for i, (k, l, c) in enumerate(zip(models_keys, labels, colors)):
+        vals = [df.loc[df["System"] == s.name, k].values[0] for s in systems]
+        plt.bar(x + i*width, vals, width, label=l, color=c, alpha=0.9, edgecolor='black', lw=0.8)
+        
+    plt.xticks(x + width*1.5, [s.name for s in systems], fontsize=9, fontweight='bold')
+    plt.ylabel("Trajectory Relative L2 Error (%)", fontsize=11, fontweight='bold')
+    plt.title(f"Autonomous Master Benchmark Trajectory Fidelity ({regime.upper()})", fontsize=12, fontweight='bold')
+    plt.yscale("log")
+    plt.grid(True, linestyle=':', alpha=0.6, which="both")
+    plt.legend(loc='upper right', fontsize=9)
+    plt.tight_layout()
+    plt.savefig(f"results/plots/autonomous_master_summary_{regime}.png")
+    plt.close()
     
     print("\n" + "=" * 115)
     print("                 AUTONOMOUS CELESTIAL MASTER BENCHMARK MATRIX")

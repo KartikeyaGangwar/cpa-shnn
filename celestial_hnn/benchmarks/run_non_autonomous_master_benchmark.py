@@ -148,7 +148,7 @@ def run_non_autonomous_master_suite(
         t0 = time.time()
         n_c = getattr(s, "n", 1.0) if s.spatial_dim == 2 else 0.0
         
-        # 5 Clean Non-Autonomous Models (Theorems 1 & 2 only)
+        # 5 Clean Non-Autonomous Models
         models = {
             "1_Standard_PINN_MLP": BaselineVectorFieldMLP(state_dim=s.state_dim, hidden_dim=256).to(dev),
             "2_Vanilla_HNN_2019": HamiltonianNeuralNetwork(spatial_dim=s.spatial_dim, hidden_dim=256, use_fourier=True).to(dev),
@@ -172,6 +172,51 @@ def run_non_autonomous_master_suite(
         res_dict["Regime"] = regime
         res_dict["Runtime_s"] = f"{el:.1f}s"
         records.append(res_dict)
+        
+        # High-Res 5-Panel Independent Overlay Figure (300 DPI) - ZERO OVERLAPPING!
+        os.makedirs("results/plots", exist_ok=True)
+        t_dense = torch.linspace(0, s.T_max, 2500, device=dev)
+        z_gt = s.ground_truth_trajectory(t_dense).detach().cpu().numpy()
+        
+        fig, axes = plt.subplots(1, 5, figsize=(25, 4.8), dpi=300)
+        
+        panel_cfgs = [
+            ("1_Standard_PINN_MLP", "Standard PINN", "r--", axes[0]),
+            ("2_Vanilla_HNN_2019", "Vanilla HNN", "darkorange", axes[1]),
+            ("3_CPA_SHNN_Core", "CPA-Core (Time-Blind)", "purple", axes[2]),
+            ("4_Theorem2_ExtendedContactHNN", "Theorem 2 (Contact)", "teal", axes[3]),
+            ("5_Theorem1_plus_2_SeparableExtendedHNN", "Theorem 1+2 (Sep-Ext)", "b-", axes[4]),
+        ]
+        
+        for key, title, style, ax in panel_cfgs:
+            pred_arr = preds_dict[key].detach().cpu().numpy()
+            if s.spatial_dim == 1:
+                t_np = t_dense.detach().cpu().numpy()
+                ax.plot(t_np, z_gt[:, 0], 'k-', lw=2.4, label='Ground Truth')
+                if '--' in style:
+                    ax.plot(t_np, pred_arr[:, 0], style, lw=1.5, label=f'Pred (Err: {res_dict[key]:.2f}%)')
+                else:
+                    ax.plot(t_np, pred_arr[:, 0], color=style.replace('-', ''), linestyle='-' if '-' in style else ':', lw=1.8, label=f'Pred (Err: {res_dict[key]:.2f}%)')
+                ax.set_xlabel("Time t", fontweight='bold')
+                ax.set_ylabel("z(t)", fontweight='bold')
+            else:
+                ax.plot(z_gt[:, 0], z_gt[:, 1], 'k-', lw=2.4, label='Ground Truth')
+                if '--' in style:
+                    ax.plot(pred_arr[:, 0], pred_arr[:, 1], style, lw=1.5, label=f'Pred (Err: {res_dict[key]:.2f}%)')
+                else:
+                    ax.plot(pred_arr[:, 0], pred_arr[:, 1], color=style.replace('-', ''), linestyle='-' if '-' in style else ':', lw=1.8, label=f'Pred (Err: {res_dict[key]:.2f}%)')
+                ax.set_xlabel("x", fontweight='bold')
+                ax.set_ylabel("y", fontweight='bold')
+                
+            ax.set_title(f"{title}\nError: {res_dict[key]:.2f}%", fontsize=10, fontweight='bold')
+            ax.grid(True, linestyle=':', alpha=0.6)
+            ax.legend(loc='best', fontsize=8)
+            
+        plt.suptitle(f"Non-Autonomous Paradigm Decomposition: {s.name} ({regime.upper()})", fontsize=13, fontweight='bold', y=1.03)
+        plt.tight_layout()
+        plot_path = f"results/plots/non_autonomous_{getattr(s, 'regime', 'reg')}_{s.name}.png"
+        plt.savefig(plot_path, bbox_inches='tight')
+        plt.close()
         
     df = pd.DataFrame(records)
     cols = ["System", "Regime", "1_Standard_PINN_MLP", "2_Vanilla_HNN_2019", "3_CPA_SHNN_Core", "4_Theorem2_ExtendedContactHNN", "5_Theorem1_plus_2_SeparableExtendedHNN", "Runtime_s"]
